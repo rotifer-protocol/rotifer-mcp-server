@@ -1,0 +1,47 @@
+{
+  "name": "@rotifer/mcp-server",
+  "version": "0.7.9",
+  "description": "Rotifer Protocol MCP Server — search, compare, explore, install, and execute Genes via Model Context Protocol",
+  "type": "module",
+  "bin": {
+    "mcp-server": "./dist/index.js",
+    "rotifer-mcp-server": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "rotifer",
+    "mcp",
+    "ai-agent",
+    "gene",
+    "evolution"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rotifer-protocol/rotifer-mcp-server"
+  },
+  "homepage": "https://rotifer.dev/docs/guides/mcp-setup",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+.wrangler/
+.temp/
+
+# ADR-106 L4a: prevent internal/ cross-contamination
+internal/
