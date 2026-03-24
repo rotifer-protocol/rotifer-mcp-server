@@ -12,9 +12,11 @@ import {
 
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { existsSync } from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLAYGROUND_ROOT = resolve(__dirname, "../../../rotifer-playground");
+const hasPlayground = existsSync(resolve(PLAYGROUND_ROOT, "genes"));
 
 describe("search_genes", { timeout: 15000 }, () => {
   let firstGeneId = "";
@@ -185,7 +187,7 @@ describe("compare_genes", { timeout: 15000 }, () => {
   });
 });
 
-describe("list_local_genes", () => {
+describe.skipIf(!hasPlayground)("list_local_genes", () => {
   it("scans playground genes", () => {
     const r = listLocalGenes({ project_root: PLAYGROUND_ROOT });
     expect(r.total).toBeGreaterThan(0);

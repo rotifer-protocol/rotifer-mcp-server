@@ -27,15 +27,15 @@ describe("logMcpCall (fire-and-forget)", () => {
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
 
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toContain("/mcp_call_log");
+    expect(url).toContain("/rpc/log_mcp_call");
     expect(opts.method).toBe("POST");
 
     const body = JSON.parse(opts.body);
-    expect(body.tool_name).toBe("search_genes");
-    expect(body.success).toBe(true);
-    expect(body.latency_ms).toBe(42);
-    expect(body.gene_id).toBeNull();
-    expect(body.caller).toBeNull();
+    expect(body.p_tool_name).toBe("search_genes");
+    expect(body.p_success).toBe(true);
+    expect(body.p_latency_ms).toBe(42);
+    expect(body.p_gene_id).toBeNull();
+    expect(body.p_caller).toBeNull();
   });
 
   it("includes gene_id when provided", async () => {
@@ -54,8 +54,8 @@ describe("logMcpCall (fire-and-forget)", () => {
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.gene_id).toBe("abc-123");
-    expect(body.caller).toBe("cursor");
+    expect(body.p_gene_id).toBe("abc-123");
+    expect(body.p_caller).toBe("cursor");
   });
 
   it("does not throw when fetch fails (fire-and-forget)", async () => {
