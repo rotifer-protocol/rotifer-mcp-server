@@ -10,7 +10,7 @@ import { getGeneStatsRpc, getReputationLeaderboard, getDeveloperProfile, getGene
 
 export function createServer(): Server {
   const server = new Server(
-    { name: "rotifer", version: "0.7.8" },
+    { name: "rotifer", version: "0.8.0" },
     { capabilities: { tools: {}, resources: {} } }
   );
 
