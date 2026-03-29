@@ -1,6 +1,7 @@
 {
   "name": "@rotifer/mcp-server",
-  "version": "0.8.1",
+  "version": "0.8.2",
+  "mcpName": "io.github.rotifer-protocol/mcp-server",
   "description": "Rotifer Protocol MCP Server — search, compare, explore, install, and execute Genes via Model Context Protocol",
   "type": "module",
   "bin": {
@@ -37,6 +38,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "@vitest/coverage-v8": "^4.1.2",
     "tsx": "^4.0.0",
     "typescript": "^5.4.0",
     "vitest": "^4.1.0"
