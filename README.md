@@ -1,6 +1,20 @@
+<div align="center">
+
 # @rotifer/mcp-server
 
-MCP (Model Context Protocol) server for the [Rotifer Protocol](https://rotifer.dev) Gene ecosystem. Lets AI agents search, inspect, compare, and rank Genes directly from any MCP-compatible IDE.
+[![npm](https://img.shields.io/npm/v/@rotifer/mcp-server)](https://www.npmjs.com/package/@rotifer/mcp-server)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
+[![MCP](https://img.shields.io/badge/MCP-Compatible-indigo)](https://modelcontextprotocol.io)
+
+**Search, inspect, compare, and rank AI Genes — directly from your IDE.**
+
+MCP server for the [Rotifer Protocol](https://rotifer.dev) Gene ecosystem.
+Works with Cursor, Claude Desktop, Windsurf, and any MCP-compatible client.
+
+</div>
+
+---
 
 ## Quick Start
 
@@ -38,6 +52,22 @@ Add to `claude_desktop_config.json`:
 
 Use the same `npx` command — any client that supports MCP stdio transport will work.
 
+## What Can It Do?
+
+```
+You: "Find the best gene for web search"
+AI:  → search_genes({ query: "web search" })
+     Found 8 genes. Top match: genesis-web-search (F(g) = 0.87, Native)
+
+You: "Compare genesis-web-search vs genesis-web-search-lite"
+AI:  → compare_genes({ gene_ids: ["...", "..."] })
+     Side-by-side: success rate, latency, fitness breakdown
+
+You: "What genes are installed locally?"
+AI:  → list_local_genes()
+     Found 5 genes in ./genes/
+```
+
 ## Tools
 
 | Tool | Description |
@@ -63,27 +93,39 @@ MCP Resources let AI clients reference Rotifer data as context:
 | `rotifer://leaderboard` | Top developers by reputation score |
 | `rotifer://local/genes` | Local Gene inventory |
 
-### Examples
+## Architecture
 
-**Search for web search genes:**
-
-> "Search for genes in the search.web domain"
-
-**Find the best gene for a task:**
-
-> "Show me Arena rankings for code.format"
-
-**Compare two genes:**
-
-> "Compare these two genes: [id-1] vs [id-2]"
-
-**Check download trends:**
-
-> "Show me download stats for this gene"
-
-**Explore local workspace:**
-
-> "What genes are installed locally?"
+```
+┌─────────────────────────────────────────────────┐
+│  AI IDE (Cursor / Claude / Windsurf)            │
+│                                                 │
+│  "Find genes for code formatting"               │
+│       │                                         │
+│       ▼                                         │
+│  ┌─────────────────────┐                        │
+│  │  MCP Client         │                        │
+│  │  (stdio transport)  │                        │
+│  └────────┬────────────┘                        │
+└───────────┼─────────────────────────────────────┘
+            │ MCP Protocol
+            ▼
+┌─────────────────────────────────────────────────┐
+│  @rotifer/mcp-server                            │
+│                                                 │
+│  Tools      Resources      Local Scanner        │
+│  ┌──────┐   ┌──────────┐   ┌───────────────┐   │
+│  │search│   │gene://id │   │ ./genes/*.json │   │
+│  │arena │   │dev://user│   │ phenotype scan │   │
+│  │stats │   │leaderbd  │   └───────────────┘   │
+│  └──┬───┘   └────┬─────┘                       │
+└─────┼────────────┼──────────────────────────────┘
+      │            │
+      ▼            ▼
+┌─────────────────────────────────────────────────┐
+│  Rotifer Cloud API (Supabase)                   │
+│  genes · arena_entries · developer_reputation   │
+└─────────────────────────────────────────────────┘
+```
 
 ## Configuration
 
@@ -111,10 +153,11 @@ ROTIFER_CLOUD_ANON_KEY=your-anon-key
 
 ## Links
 
-- [Rotifer Protocol](https://rotifer.dev)
-- [MCP Setup Guide](https://rotifer.dev/docs/guides/mcp-setup)
-- [Gene Marketplace](https://rotifer.ai)
-- [Protocol Specification](https://github.com/rotifer-protocol/rotifer-spec)
+- [Rotifer Protocol](https://rotifer.dev) — Main site
+- [MCP Setup Guide](https://rotifer.dev/docs/guides/mcp-setup) — Step-by-step setup
+- [Gene Marketplace](https://rotifer.ai) — Browse and discover Genes
+- [Protocol Specification](https://github.com/rotifer-protocol/rotifer-spec) — Formal spec
+- [CLI Playground](https://github.com/rotifer-protocol/rotifer-playground) — Build and test Genes
 
 ## License
 
