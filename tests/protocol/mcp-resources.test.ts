@@ -4,6 +4,9 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../../src/server.js";
 import { searchGenes } from "../../src/tools.js";
 
+const hasCloudKey = !!process.env.ROTIFER_CLOUD_ANON_KEY;
+const describeCloud = hasCloudKey ? describe : describe.skip;
+
 let client: Client;
 let cleanup: () => Promise<void>;
 
@@ -50,7 +53,7 @@ describe("listResourceTemplates", { timeout: 10000 }, () => {
   });
 });
 
-describe("readResource", { timeout: 15000 }, () => {
+describeCloud("readResource", { timeout: 15000 }, () => {
   it("rotifer://leaderboard returns JSON content", async () => {
     const result = await client.readResource({ uri: "rotifer://leaderboard" });
     expect(result.contents.length).toBe(1);
