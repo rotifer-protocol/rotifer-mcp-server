@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-safe Supabase anon keys (public by design, RLS-protected)"
+paths = [
+  '''^src/cloud\.ts$''',
+]

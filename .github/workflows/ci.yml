@@ -37,7 +37,7 @@ jobs:
         run: go install github.com/zricethezav/gitleaks/v8@v8.30.1
       - name: Run gitleaks
         run: |
-          "$(go env GOPATH)/bin/gitleaks" git . --no-banner --redact
+          "$(go env GOPATH)/bin/gitleaks" git . --config .gitleaks.toml --no-banner --redact
 
   cross-contamination:
     name: Cross-Contamination Check
