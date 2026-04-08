@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { searchGenes, getGeneDetail, developerProfile, listLocalGenes } from "../../src/tools.js";
 
-describe("SQL injection via search query", { timeout: 15000 }, () => {
+const hasCloudKey = !!process.env.ROTIFER_CLOUD_ANON_KEY;
+const describeCloud = hasCloudKey ? describe : describe.skip;
+
+describeCloud("SQL injection via search query", { timeout: 15000 }, () => {
   const payloads = [
     "'; DROP TABLE genes; --",
     "1 OR 1=1",
@@ -19,14 +22,14 @@ describe("SQL injection via search query", { timeout: 15000 }, () => {
   }
 });
 
-describe("SQL injection via domain filter", { timeout: 15000 }, () => {
+describeCloud("SQL injection via domain filter", { timeout: 15000 }, () => {
   it("handles injected domain value", async () => {
     const result = await searchGenes({ domain: "search.web; DELETE FROM genes" });
     expect(Array.isArray(result.genes)).toBe(true);
   });
 });
 
-describe("XSS via query parameters", { timeout: 15000 }, () => {
+describeCloud("XSS via query parameters", { timeout: 15000 }, () => {
   const xssPayloads = [
     "<script>alert(1)</script>",
     "<img src=x onerror=alert(1)>",
@@ -43,7 +46,7 @@ describe("XSS via query parameters", { timeout: 15000 }, () => {
   }
 });
 
-describe("gene ID injection", { timeout: 15000 }, () => {
+describeCloud("gene ID injection", { timeout: 15000 }, () => {
   const idPayloads = [
     "../../etc/passwd",
     "'; DROP TABLE genes; --",
@@ -58,7 +61,7 @@ describe("gene ID injection", { timeout: 15000 }, () => {
   }
 });
 
-describe("username injection", { timeout: 15000 }, () => {
+describeCloud("username injection", { timeout: 15000 }, () => {
   const userPayloads = [
     "admin'--",
     "' OR '1'='1",
