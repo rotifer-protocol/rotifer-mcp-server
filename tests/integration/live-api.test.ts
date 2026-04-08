@@ -18,7 +18,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PLAYGROUND_ROOT = resolve(__dirname, "../../../rotifer-playground");
 const hasPlayground = existsSync(resolve(PLAYGROUND_ROOT, "genes"));
 
-describe("search_genes", { timeout: 15000 }, () => {
+const hasCloudKey = !!process.env.ROTIFER_CLOUD_ANON_KEY;
+const describeCloud = hasCloudKey ? describe : describe.skip;
+
+describeCloud("search_genes", { timeout: 15000 }, () => {
   let firstGeneId = "";
 
   it("finds genes matching a query", async () => {
@@ -61,7 +64,7 @@ describe("search_genes", { timeout: 15000 }, () => {
   });
 });
 
-describe("get_gene_detail", { timeout: 15000 }, () => {
+describeCloud("get_gene_detail", { timeout: 15000 }, () => {
   it("returns gene with phenotype", async () => {
     const search = await searchGenes({ perPage: 1 });
     const g = await getGeneDetail({ gene_id: search.genes[0].id });
@@ -81,7 +84,7 @@ describe("get_gene_detail", { timeout: 15000 }, () => {
   });
 });
 
-describe("get_arena_rankings", { timeout: 15000 }, () => {
+describeCloud("get_arena_rankings", { timeout: 15000 }, () => {
   it("returns rankings for all domains", async () => {
     const r = await arenaRankings({});
     expect(Array.isArray(r.rankings)).toBe(true);
@@ -107,7 +110,7 @@ describe("get_arena_rankings", { timeout: 15000 }, () => {
   });
 });
 
-describe("get_gene_stats", { timeout: 15000 }, () => {
+describeCloud("get_gene_stats", { timeout: 15000 }, () => {
   it("returns download stats for valid gene", async () => {
     const search = await searchGenes({ perPage: 1 });
     const r = await geneStats({ gene_id: search.genes[0].id });
@@ -126,7 +129,7 @@ describe("get_gene_stats", { timeout: 15000 }, () => {
   });
 });
 
-describe("get_leaderboard", { timeout: 15000 }, () => {
+describeCloud("get_leaderboard", { timeout: 15000 }, () => {
   it("returns array with count", async () => {
     const r = await leaderboard({});
     expect(Array.isArray(r.developers)).toBe(true);
@@ -149,7 +152,7 @@ describe("get_leaderboard", { timeout: 15000 }, () => {
   });
 });
 
-describe("get_developer_profile", { timeout: 15000 }, () => {
+describeCloud("get_developer_profile", { timeout: 15000 }, () => {
   it("returns profile for valid username", async () => {
     const search = await searchGenes({ perPage: 1 });
     const owner = search.genes[0].owner;
@@ -166,7 +169,7 @@ describe("get_developer_profile", { timeout: 15000 }, () => {
   });
 });
 
-describe("compare_genes", { timeout: 15000 }, () => {
+describeCloud("compare_genes", { timeout: 15000 }, () => {
   it("compares 2 genes", async () => {
     const search = await searchGenes({ perPage: 2 });
     expect(search.genes.length).toBeGreaterThanOrEqual(2);
