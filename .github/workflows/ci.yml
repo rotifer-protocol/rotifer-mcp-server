@@ -7,15 +7,19 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version: 22
       - run: npm ci
+      - run: npm audit --audit-level=high
       - run: npm run build
       - run: npm test
 
@@ -23,10 +27,10 @@ jobs:
     name: Secrets Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -34,7 +38,7 @@ jobs:
     name: Cross-Contamination Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
       - name: Scan for private file paths
@@ -47,14 +51,52 @@ jobs:
           fi
           echo "✅ No contamination detected"
 
+  security-report:
+    name: Security & Dependency Audit
+    runs-on: ubuntu-latest
+    needs: [build-and-test]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: 22
+      - run: npm ci
+
+      - name: Report security + dependency audit
+        if: env.QUALITY_SUPABASE_URL != ''
+        env:
+          QUALITY_SUPABASE_URL: ${{ secrets.QUALITY_SUPABASE_URL }}
+          QUALITY_SUPABASE_KEY: ${{ secrets.QUALITY_SUPABASE_SERVICE_KEY }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          NPM_AUDIT=$(npm audit --json --registry https://registry.npmjs.org/ 2>/dev/null || echo '{}')
+          CRITICAL=$(echo "$NPM_AUDIT" | node -p "try{JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).metadata?.vulnerabilities?.critical||0}catch{0}")
+          HIGH=$(echo "$NPM_AUDIT" | node -p "try{JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).metadata?.vulnerabilities?.high||0}catch{0}")
+          MODERATE=$(echo "$NPM_AUDIT" | node -p "try{JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).metadata?.vulnerabilities?.moderate||0}catch{0}")
+          LOW=$(echo "$NPM_AUDIT" | node -p "try{JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).metadata?.vulnerabilities?.low||0}catch{0}")
+          TOTAL=$(echo "$NPM_AUDIT" | node -p "try{JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).metadata?.dependencies?.total||0}catch{0}")
+          GRADE="PASS"
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then GRADE="FAIL"; fi
+          curl -s -X POST "${QUALITY_SUPABASE_URL}/rest/v1/security_scan_results" \
+            -H "apikey: ${QUALITY_SUPABASE_KEY}" -H "Authorization: Bearer ${QUALITY_SUPABASE_KEY}" \
+            -H "Content-Type: application/json" -H "Prefer: return=minimal" \
+            -d "{\"version\":\"v${VERSION}\",\"component\":\"mcp\",\"scan_type\":\"npm_audit\",\"grade\":\"${GRADE}\",\"severity_counts\":{\"critical\":${CRITICAL},\"high\":${HIGH},\"moderate\":${MODERATE},\"low\":${LOW}},\"source\":\"ci\",\"ci_run_url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
+            && echo "✅ Security scan reported" || echo "⚠️ Report failed"
+          curl -s -X POST "${QUALITY_SUPABASE_URL}/rest/v1/dependency_audit_logs" \
+            -H "apikey: ${QUALITY_SUPABASE_KEY}" -H "Authorization: Bearer ${QUALITY_SUPABASE_KEY}" \
+            -H "Content-Type: application/json" -H "Prefer: return=minimal" \
+            -d "{\"component\":\"mcp\",\"audit_tool\":\"npm_audit\",\"total_deps\":${TOTAL},\"vulnerabilities\":{\"critical\":${CRITICAL},\"high\":${HIGH},\"moderate\":${MODERATE},\"low\":${LOW}},\"ci_run_url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
+            && echo "✅ Dependency audit reported" || echo "⚠️ Report failed"
+
   report-quality:
     name: Report to Quality Observatory
     runs-on: ubuntu-latest
     needs: [build-and-test]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version: 22
       - run: npm ci
