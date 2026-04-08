@@ -4,16 +4,16 @@ import { getDeveloperProfile } from "../../src/cloud.js";
 
 describe("v0.7.5 migration: gene version chain", { timeout: 15000 }, () => {
   it("list_gene_versions returns linked versions for text-to-video", async () => {
-    const r = await geneVersions({ owner: "sharesummer", name: "text-to-video" });
+    const r = await geneVersions({ owner: "sharesummer", gene_name: "text-to-video" });
     expect(r.count).toBeGreaterThanOrEqual(2);
 
-    const hasLinked = r.versions.some((v: any) => v.previous_version_id != null);
+    const hasLinked = r.versions.some((v: any) => v.previousVersionId != null);
     expect(hasLinked).toBe(true);
   });
 
   it("version chain has chronological ordering", async () => {
-    const r = await geneVersions({ owner: "sharesummer", name: "text-to-video" });
-    const dates = r.versions.map((v: any) => new Date(v.created_at).getTime());
+    const r = await geneVersions({ owner: "sharesummer", gene_name: "text-to-video" });
+    const dates = r.versions.map((v: any) => new Date(v.createdAt).getTime());
     for (let i = 1; i < dates.length; i++) {
       expect(dates[i]).toBeGreaterThanOrEqual(dates[i - 1]);
     }
@@ -25,7 +25,7 @@ describe("v0.7.5 migration: developer_reputation gene count", { timeout: 15000 }
     const profile = await getDeveloperProfile("rotifer-protocol");
     expect(profile).toBeDefined();
     expect(profile.reputation).not.toBeNull();
-    expect(profile.reputation!.genes_published).toBeGreaterThan(0);
+    expect(profile.reputation!.genesPublished).toBeGreaterThan(0);
   });
 });
 

@@ -23,9 +23,9 @@ afterAll(async () => {
 });
 
 describe("listTools", { timeout: 10000 }, () => {
-  it("returns exactly 28 tools", async () => {
+  it("returns exactly 29 tools", async () => {
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(28);
+    expect(tools.length).toBe(29);
   });
 
   it("includes all expected tool names", async () => {
@@ -57,6 +57,7 @@ describe("listTools", { timeout: 10000 }, () => {
     expect(names).toContain("get_gene_reputation");
     expect(names).toContain("get_my_reputation");
     expect(names).toContain("suggest_domain");
+    expect(names).toContain("vg_scan");
   });
 
   it("every tool has description and inputSchema", async () => {
@@ -71,7 +72,7 @@ describe("listTools", { timeout: 10000 }, () => {
 
 describe("callTool", { timeout: 15000 }, () => {
   it("search_genes returns valid JSON", async () => {
-    const result = await client.callTool({ name: "search_genes", arguments: { perPage: 2 } });
+    const result = await client.callTool({ name: "search_genes", arguments: { per_page: 2 } });
     expect(result.isError).toBeFalsy();
     const content = result.content as any[];
     expect(content[0].type).toBe("text");
@@ -81,11 +82,11 @@ describe("callTool", { timeout: 15000 }, () => {
   });
 
   it("get_gene_detail returns gene data", async () => {
-    const searchResult = await client.callTool({ name: "search_genes", arguments: { perPage: 1 } });
+    const searchResult = await client.callTool({ name: "search_genes", arguments: { per_page: 1 } });
     const searchData = JSON.parse((searchResult.content as any[])[0].text);
     const geneId = searchData.genes[0].id;
 
-    const result = await client.callTool({ name: "get_gene_detail", arguments: { id: geneId } });
+    const result = await client.callTool({ name: "get_gene_detail", arguments: { gene_id: geneId } });
     expect(result.isError).toBeFalsy();
     const gene = JSON.parse((result.content as any[])[0].text);
     expect(gene.id).toBe(geneId);
@@ -100,14 +101,14 @@ describe("callTool", { timeout: 15000 }, () => {
   });
 
   it("get_gene_stats returns time-bucketed stats", async () => {
-    const searchResult = await client.callTool({ name: "search_genes", arguments: { perPage: 1 } });
+    const searchResult = await client.callTool({ name: "search_genes", arguments: { per_page: 1 } });
     const geneId = JSON.parse((searchResult.content as any[])[0].text).genes[0].id;
 
     const result = await client.callTool({ name: "get_gene_stats", arguments: { gene_id: geneId } });
     expect(result.isError).toBeFalsy();
     const stats = JSON.parse((result.content as any[])[0].text);
     expect(typeof stats.total).toBe("number");
-    expect(typeof stats.last_7d).toBe("number");
+    expect(typeof stats.last7d).toBe("number");
   });
 
   it("get_leaderboard returns developers", async () => {
@@ -118,7 +119,7 @@ describe("callTool", { timeout: 15000 }, () => {
   });
 
   it("get_developer_profile returns profile data", async () => {
-    const searchResult = await client.callTool({ name: "search_genes", arguments: { perPage: 1 } });
+    const searchResult = await client.callTool({ name: "search_genes", arguments: { per_page: 1 } });
     const owner = JSON.parse((searchResult.content as any[])[0].text).genes[0].owner;
 
     const result = await client.callTool({ name: "get_developer_profile", arguments: { username: owner } });
@@ -147,17 +148,31 @@ describe("callTool", { timeout: 15000 }, () => {
     const result = await client.callTool({ name: "auth_status", arguments: {} });
     expect(result.isError).toBeFalsy();
     const data = JSON.parse((result.content as any[])[0].text);
-    expect(typeof data.logged_in).toBe("boolean");
+    expect(typeof data.is_logged_in).toBe("boolean");
   });
 
   it("returns isError for invalid gene detail", async () => {
     const result = await client.callTool({
       name: "get_gene_detail",
-      arguments: { id: "00000000-0000-0000-0000-000000000000" },
+      arguments: { gene_id: "00000000-0000-0000-0000-000000000000" },
     });
     expect(result.isError).toBe(true);
     const text = (result.content as any[])[0].text;
     expect(text).toContain("Error");
+  });
+
+  it("vg_scan returns security scan result or CLI error", async () => {
+    const result = await client.callTool({ name: "vg_scan", arguments: {} });
+    const text = (result.content as any[])[0].text;
+    if (result.isError) {
+      expect(text).toContain("Error");
+    } else {
+      const data = JSON.parse(text);
+      expect(data.grade).toBeDefined();
+      expect(["A", "B", "C", "D", "?"]).toContain(data.grade);
+      expect(Array.isArray(data.findings)).toBe(true);
+      expect(typeof data.stats.files_scanned).toBe("number");
+    }
   });
 
   it("returns isError for unknown tool", async () => {
@@ -165,5 +180,6 @@ describe("callTool", { timeout: 15000 }, () => {
     expect(result.isError).toBe(true);
     const text = (result.content as any[])[0].text;
     expect(text).toContain("Unknown tool");
+    expect(text).toContain("ListTools");
   });
 });

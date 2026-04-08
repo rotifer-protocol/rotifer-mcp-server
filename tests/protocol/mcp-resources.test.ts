@@ -24,9 +24,9 @@ afterAll(async () => {
 });
 
 describe("listResourceTemplates", { timeout: 10000 }, () => {
-  it("returns exactly 6 resource templates", async () => {
+  it("returns exactly 7 resource templates", async () => {
     const { resourceTemplates } = await client.listResourceTemplates();
-    expect(resourceTemplates.length).toBe(6);
+    expect(resourceTemplates.length).toBe(7);
   });
 
   it("includes all expected URI templates", async () => {
@@ -37,6 +37,7 @@ describe("listResourceTemplates", { timeout: 10000 }, () => {
     expect(uris).toContain("rotifer://genes/{gene_id}");
     expect(uris).toContain("rotifer://leaderboard");
     expect(uris).toContain("rotifer://local/genes");
+    expect(uris).toContain("rotifer://version");
   });
 
   it("every template has name, description, and mimeType", async () => {
@@ -81,7 +82,7 @@ describe("readResource", { timeout: 15000 }, () => {
     const result = await client.readResource({ uri: `rotifer://genes/${geneId}/stats` });
     const data = JSON.parse(result.contents[0].text as string);
     expect(typeof data.total).toBe("number");
-    expect(typeof data.last_7d).toBe("number");
+    expect(typeof data.last7d).toBe("number");
   });
 
   it("rotifer://developers/{username} returns profile", async () => {

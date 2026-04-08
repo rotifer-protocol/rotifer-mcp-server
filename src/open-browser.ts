@@ -1,20 +1,21 @@
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 
 /**
- * Build the shell command to open a URL in the default browser.
+ * Resolve the binary and arguments to open a URL in the default browser.
  * Exported separately for testability.
  */
-export function buildOpenCommand(url: string, platform: string): string {
+export function buildOpenCommand(url: string, platform: string): { bin: string; args: string[] } {
   if (platform === "win32") {
-    return `start "" "${url}"`;
+    return { bin: "cmd", args: ["/c", "start", "", url] };
   }
   const bin = platform === "darwin" ? "open" : "xdg-open";
-  return `${bin} "${url}"`;
+  return { bin, args: [url] };
 }
 
 /**
  * Open a URL in the user's default browser, cross-platform.
  */
 export function openBrowser(url: string): void {
-  exec(buildOpenCommand(url, process.platform));
+  const { bin, args } = buildOpenCommand(url, process.platform);
+  execFile(bin, args);
 }

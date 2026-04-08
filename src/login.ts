@@ -6,7 +6,7 @@ import {
   clearCredentials,
   generateCodeVerifier,
   generateCodeChallenge,
-  waitForOAuthCallback,
+  startOAuthCallbackServer,
 } from "./auth.js";
 import type { AuthProvider } from "./auth.js";
 
@@ -29,16 +29,18 @@ export async function runLogin(options: {
   if (!SUPPORTED_PROVIDERS.includes(provider)) {
     console.error(`Unsupported provider: '${provider}'. Supported: ${SUPPORTED_PROVIDERS.join(", ")}`);
     process.exit(1);
+    return;
   }
 
   const config = loadCloudConfig();
   const endpoint = options.endpoint || config.endpoint;
 
-  console.log(`Opening browser for ${provider} authorization...`);
-
-  const callbackPort = 9876;
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = generateCodeChallenge(codeVerifier);
+
+  const { port: callbackPort, waitForCallback } = await startOAuthCallbackServer();
+
+  console.log(`Opening browser for ${provider} authorization...`);
 
   const authUrl =
     `${endpoint}/auth/v1/authorize?provider=${provider}` +
@@ -48,10 +50,10 @@ export async function runLogin(options: {
 
   openBrowser(authUrl);
 
-  console.log("Waiting for authorization (timeout: 120s)...");
+  console.log(`Waiting for authorization on port ${callbackPort} (timeout: 120s)...`);
 
   try {
-    const callbackResult = await waitForOAuthCallback(callbackPort);
+    const callbackResult = await waitForCallback;
 
     let accessToken: string;
     let refreshToken: string;

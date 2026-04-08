@@ -17,12 +17,21 @@ vi.mock("../../src/auth.js", () => ({
   clearCredentials: vi.fn(),
   generateCodeVerifier: vi.fn().mockReturnValue("test-verifier"),
   generateCodeChallenge: vi.fn().mockReturnValue("test-challenge"),
-  waitForOAuthCallback: vi.fn(),
+  startOAuthCallbackServer: vi.fn(),
 }));
 
 import { runLogin, runLogout } from "../../src/login.js";
-import { loadCredentials, saveCredentials, clearCredentials, waitForOAuthCallback } from "../../src/auth.js";
+import { loadCredentials, saveCredentials, clearCredentials, startOAuthCallbackServer } from "../../src/auth.js";
 import { openBrowser } from "../../src/open-browser.js";
+
+function mockCallbackServer(result: string | Error) {
+  vi.mocked(startOAuthCallbackServer).mockResolvedValue({
+    port: 54321,
+    waitForCallback: result instanceof Error
+      ? Promise.reject(result)
+      : Promise.resolve(result),
+  });
+}
 
 const MOCK_CREDS = {
   access_token: "at-123",
@@ -78,7 +87,7 @@ describe("runLogin", () => {
 
   it("defaults to github provider when none specified", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    vi.mocked(waitForOAuthCallback).mockResolvedValue("implicit:at-new:rt-new");
+    mockCallbackServer("implicit:at-new:rt-new");
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({
@@ -95,7 +104,7 @@ describe("runLogin", () => {
 
   it("constructs auth URL with code challenge", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    vi.mocked(waitForOAuthCallback).mockResolvedValue("implicit:at-new:rt-new");
+    mockCallbackServer("implicit:at-new:rt-new");
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({
@@ -110,9 +119,26 @@ describe("runLogin", () => {
     );
   });
 
+  it("uses random port in redirect URL", async () => {
+    vi.mocked(loadCredentials).mockReturnValue(null);
+    mockCallbackServer("implicit:at:rt");
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        id: "u2",
+        user_metadata: { user_name: "newuser" },
+      }),
+    }) as any;
+
+    await runLogin({});
+    expect(openBrowser).toHaveBeenCalledWith(
+      expect.stringContaining("localhost:54321"),
+    );
+  });
+
   it("handles implicit token flow correctly", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    vi.mocked(waitForOAuthCallback).mockResolvedValue("implicit:token-abc:refresh-xyz");
+    mockCallbackServer("implicit:token-abc:refresh-xyz");
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({
@@ -132,7 +158,7 @@ describe("runLogin", () => {
 
   it("handles PKCE code exchange flow", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    vi.mocked(waitForOAuthCallback).mockResolvedValue("auth-code-123");
+    mockCallbackServer("auth-code-123");
     global.fetch = vi.fn()
       .mockResolvedValueOnce({
         ok: true,
@@ -160,7 +186,7 @@ describe("runLogin", () => {
 
   it("exits with error when token exchange fails", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    vi.mocked(waitForOAuthCallback).mockResolvedValue("bad-code");
+    mockCallbackServer("bad-code");
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       text: () => Promise.resolve("Invalid code"),
@@ -175,7 +201,7 @@ describe("runLogin", () => {
 
   it("uses custom endpoint when provided", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    vi.mocked(waitForOAuthCallback).mockResolvedValue("implicit:at:rt");
+    mockCallbackServer("implicit:at:rt");
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({
@@ -192,7 +218,7 @@ describe("runLogin", () => {
 
   it("extracts username from various metadata fields", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    vi.mocked(waitForOAuthCallback).mockResolvedValue("implicit:at:rt");
+    mockCallbackServer("implicit:at:rt");
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({
@@ -211,7 +237,7 @@ describe("runLogin", () => {
 
   it("falls back to email prefix when no username metadata", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    vi.mocked(waitForOAuthCallback).mockResolvedValue("implicit:at:rt");
+    mockCallbackServer("implicit:at:rt");
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({
@@ -230,7 +256,7 @@ describe("runLogin", () => {
 
   it("defaults to 'unknown' when no username info available", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    vi.mocked(waitForOAuthCallback).mockResolvedValue("implicit:at:rt");
+    mockCallbackServer("implicit:at:rt");
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ id: "u8", user_metadata: {} }),
@@ -246,7 +272,7 @@ describe("runLogin", () => {
 
   it("handles callback error gracefully", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    vi.mocked(waitForOAuthCallback).mockRejectedValue(new Error("Timed out"));
+    mockCallbackServer(new Error("Timed out"));
 
     await runLogin({});
     expect(errorSpy).toHaveBeenCalledWith("Timed out");

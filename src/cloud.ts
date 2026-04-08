@@ -1,6 +1,20 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { loadCredentials } from "./auth.js";
+import { validateGeneName } from "./validate-gene-name.js";
+import type {
+  GeneRow,
+  SearchGeneRow,
+  ArenaEntryRow,
+  GeneStatsRpcResult,
+  LeaderboardRow,
+  ProfileRow,
+  DeveloperReputationRow,
+  GeneReputationRow,
+  GeneVersionRow,
+  McpCallLogRow,
+  DomainSuggestionRow,
+} from "./wire-types.js";
 
 const ROTIFER_HOME = join(
   process.env.HOME || process.env.USERPROFILE || "/tmp",
@@ -11,9 +25,6 @@ interface CloudConfig {
   endpoint: string;
   anonKey: string;
 }
-
-const DEFAULT_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpaGJtcHVxbGFtaHhibWFoY2plIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4MjUxMTQsImV4cCI6MjA4NzQwMTExNH0.t77n7TZ2jV04lya2sWuv4AYAcXnsc49jcfVIJr0heYQ";
 
 let _cachedConfig: CloudConfig | null = null;
 
@@ -26,7 +37,7 @@ export function loadCloudConfig(): CloudConfig {
       const file = JSON.parse(readFileSync(configPath, "utf-8")) as Partial<CloudConfig>;
       _cachedConfig = {
         endpoint: file.endpoint || process.env.ROTIFER_CLOUD_ENDPOINT || "https://cloud.rotifer.dev",
-        anonKey: file.anonKey || process.env.ROTIFER_CLOUD_ANON_KEY || DEFAULT_ANON_KEY,
+        anonKey: file.anonKey || process.env.ROTIFER_CLOUD_ANON_KEY || "",
       };
       return _cachedConfig;
     } catch {
@@ -35,7 +46,7 @@ export function loadCloudConfig(): CloudConfig {
   }
   _cachedConfig = {
     endpoint: process.env.ROTIFER_CLOUD_ENDPOINT || "https://cloud.rotifer.dev",
-    anonKey: process.env.ROTIFER_CLOUD_ANON_KEY || DEFAULT_ANON_KEY,
+    anonKey: process.env.ROTIFER_CLOUD_ANON_KEY || "",
   };
   return _cachedConfig;
 }
@@ -106,13 +117,13 @@ export interface Gene {
   version: string;
   fidelity: string;
   description: string;
-  wasm_size: number;
+  wasmSize: number;
   downloads: number;
-  reputation_score: number | null;
-  previous_version_id: string | null;
+  reputationScore: number | null;
+  previousVersionId: string | null;
   changelog: string | null;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
   phenotype?: Record<string, unknown>;
 }
 
@@ -121,6 +132,22 @@ export interface GeneListResult {
   total: number;
   page: number;
   per_page: number;
+  has_more: boolean;
+}
+
+function compareSemver(a: string, b: string): number {
+  const pa = a.replace(/^v/, "").split(".");
+  const pb = b.replace(/^v/, "").split(".");
+  for (let i = 0; i < 3; i++) {
+    const na = parseInt(pa[i] || "0", 10);
+    const nb = parseInt(pb[i] || "0", 10);
+    if (na !== nb) return na - nb;
+  }
+  const preA = a.includes("-") ? a.split("-").slice(1).join("-") : "";
+  const preB = b.includes("-") ? b.split("-").slice(1).join("-") : "";
+  if (!preA && preB) return 1;
+  if (preA && !preB) return -1;
+  return preA.localeCompare(preB);
 }
 
 function deduplicateLatestVersion(genes: Gene[]): Gene[] {
@@ -128,12 +155,12 @@ function deduplicateLatestVersion(genes: Gene[]): Gene[] {
   for (const g of genes) {
     const key = `${g.owner}\0${g.name}`;
     const existing = map.get(key);
-    if (!existing || new Date(g.created_at) > new Date(existing.created_at)) {
+    if (!existing || compareSemver(g.version, existing.version) > 0) {
       map.set(key, g);
     }
   }
   return [...map.values()].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 }
 
@@ -164,7 +191,7 @@ export async function listGenes(options: {
     }),
   });
 
-  const data = await handleResponse<any[]>(res);
+  const data = await handleResponse<SearchGeneRow[]>(res);
 
   const allGenes: Gene[] = data.map((row) => ({
     id: row.id,
@@ -174,31 +201,22 @@ export async function listGenes(options: {
     version: row.version,
     fidelity: row.fidelity,
     description: row.description,
-    wasm_size: row.wasm_size || 0,
+    wasmSize: row.wasm_size || 0,
     downloads: row.downloads || 0,
-    reputation_score: row.reputation_score ?? null,
-    previous_version_id: row.previous_version_id ?? null,
+    reputationScore: row.reputation_score ?? null,
+    previousVersionId: row.previous_version_id ?? null,
     changelog: row.changelog ?? null,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }));
 
   const deduped = deduplicateLatestVersion(allGenes);
   const paged = deduped.slice(offset, offset + limit);
 
-  return { genes: paged, total: deduped.length, page, per_page: limit };
+  return { genes: paged, total: deduped.length, page, per_page: limit, has_more: offset + limit < deduped.length };
 }
 
-export async function getGene(id: string): Promise<Gene & { phenotype: Record<string, unknown> }> {
-  const params = new URLSearchParams();
-  params.set("id", `eq.${id}`);
-  params.set("select", "*, profiles(username)");
-
-  const res = await fetch(apiUrl(`/genes?${params}`), { headers: headers() });
-  const data = await handleResponse<any[]>(res);
-  if (data.length === 0) throw new Error(`Gene '${id}' not found`);
-
-  const row = data[0];
+function mapGeneRow(row: GeneRow): Gene & { phenotype: Record<string, unknown> } {
   return {
     id: row.id,
     name: row.name,
@@ -208,36 +226,98 @@ export async function getGene(id: string): Promise<Gene & { phenotype: Record<st
     fidelity: row.fidelity,
     description: row.description,
     phenotype: row.phenotype || {},
-    wasm_size: row.wasm_size || 0,
+    wasmSize: row.wasm_size || 0,
     downloads: row.downloads || 0,
-    reputation_score: row.reputation_score ?? null,
-    previous_version_id: row.previous_version_id ?? null,
+    reputationScore: row.reputation_score ?? null,
+    previousVersionId: row.previous_version_id ?? null,
     changelog: row.changelog ?? null,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CONTENT_HASH_RE = /^[0-9a-f]{64}$/i;
+
+export async function getGene(idOrName: string): Promise<Gene & { phenotype: Record<string, unknown> }> {
+  if (CONTENT_HASH_RE.test(idOrName)) {
+    return getGeneByContentHash(idOrName);
+  }
+
+  const params = new URLSearchParams();
+  if (UUID_RE.test(idOrName)) {
+    params.set("id", `eq.${idOrName}`);
+  } else {
+    params.set("name", `eq.${idOrName}`);
+    params.set("order", "created_at.desc");
+    params.set("limit", "1");
+  }
+  params.set("select", "*, profiles(username)");
+
+  const creds = loadCredentials();
+  const h = creds ? authHeaders() : headers();
+  if (!creds) {
+    params.set("published", "eq.true");
+  }
+
+  const res = await fetch(apiUrl(`/genes?${params}`), { headers: h });
+  const data = await handleResponse<GeneRow[]>(res);
+  if (data.length === 0) throw new Error(`Gene '${idOrName}' not found. Verify the UUID/name or use search_genes to find genes.`);
+  const gene = mapGeneRow(data[0]);
+  if (!data[0].published && creds && data[0].owner_id !== creds.user?.id) {
+    throw new Error(`Gene '${idOrName}' not found. Verify the UUID/name or use search_genes to find genes.`);
+  }
+  return gene;
+}
+
+export async function getGeneByContentHash(hash: string): Promise<Gene & { phenotype: Record<string, unknown> }> {
+  if (!/^[a-f0-9]{64}$/.test(hash)) {
+    throw new Error("content_hash must be a 64-character hex string (SHA-256)");
+  }
+  const params = new URLSearchParams();
+  params.set("content_hash", `eq.${hash}`);
+  params.set("select", "*, profiles(username)");
+  params.set("order", "created_at.desc");
+  params.set("limit", "1");
+
+  const creds = loadCredentials();
+  const h = creds ? authHeaders() : headers();
+  if (!creds) {
+    params.set("published", "eq.true");
+  }
+
+  const res = await fetch(apiUrl(`/genes?${params}`), { headers: h });
+  const data = await handleResponse<GeneRow[]>(res);
+  if (data.length === 0) throw new Error(`Gene with content_hash '${hash}' not found. Verify the hash or use search_genes.`);
+  if (!data[0].published && creds && data[0].owner_id !== creds.user?.id) {
+    throw new Error(`Gene with content_hash '${hash}' not found. Verify the hash or use search_genes.`);
+  }
+  return mapGeneRow(data[0]);
 }
 
 export interface ArenaEntry {
   rank: number;
-  gene_id: string;
-  gene_name: string;
+  geneId: string;
+  geneName: string;
   owner: string;
   domain: string;
   fidelity: string;
   fitness: number;
   safety: number;
-  success_rate: number;
-  latency_score: number;
-  resource_efficiency: number;
-  reputation_score: number | null;
-  total_calls: number;
-  last_evaluated: string;
+  successRate: number;
+  latencyScore: number;
+  resourceEfficiency: number;
+  reputationScore: number | null;
+  totalCalls: number;
+  lastEvaluated: string;
 }
 
 export interface ArenaRankingsResult {
   rankings: ArenaEntry[];
   total: number;
+  page: number;
+  per_page: number;
+  has_more: boolean;
   domain: string | null;
 }
 
@@ -264,35 +344,36 @@ export async function getArenaRankings(options: {
   });
 
   const total = parseInt(res.headers.get("content-range")?.split("/")[1] || "0", 10);
-  const data = await handleResponse<any[]>(res);
+  const data = await handleResponse<ArenaEntryRow[]>(res);
 
   const rankings: ArenaEntry[] = data.map((row, i) => ({
     rank: offset + i + 1,
-    gene_id: row.gene_id,
-    gene_name: row.genes?.name || "unknown",
+    geneId: row.gene_id,
+    geneName: row.genes?.name || "unknown",
     owner: row.genes?.profiles?.username || "unknown",
     domain: row.domain,
     fidelity: row.genes?.fidelity || "Unknown",
     fitness: row.fitness_value,
     safety: row.safety_score,
-    success_rate: row.success_rate,
-    latency_score: row.latency_score,
-    resource_efficiency: row.resource_efficiency,
-    total_calls: Number(row.total_calls) || 0,
-    reputation_score: null,
-    last_evaluated: row.last_evaluated,
+    successRate: row.success_rate,
+    latencyScore: row.latency_score,
+    resourceEfficiency: row.resource_efficiency,
+    totalCalls: Number(row.total_calls) || 0,
+    reputationScore: null,
+    lastEvaluated: row.last_evaluated,
   }));
 
-  return { rankings, total, domain: options.domain || null };
+  const page = options.page || 1;
+  return { rankings, total, page, per_page: limit, has_more: offset + limit < total, domain: options.domain || null };
 }
 
 // --- Gene Stats ---
 
 export interface GeneStats {
   total: number;
-  last_7d: number;
-  last_30d: number;
-  last_90d: number;
+  last7d: number;
+  last30d: number;
+  last90d: number;
 }
 
 export async function getGeneStatsRpc(geneId: string): Promise<GeneStats> {
@@ -301,26 +382,26 @@ export async function getGeneStatsRpc(geneId: string): Promise<GeneStats> {
     headers: headers(),
     body: JSON.stringify({ p_gene_id: geneId }),
   });
-  const data = await handleResponse<GeneStats & { error?: string }>(res);
+  const data = await handleResponse<GeneStatsRpcResult>(res);
   if (data.error) throw new Error(data.error);
   return {
     total: data.total ?? 0,
-    last_7d: data.last_7d ?? 0,
-    last_30d: data.last_30d ?? 0,
-    last_90d: data.last_90d ?? 0,
+    last7d: data.last_7d ?? 0,
+    last30d: data.last_30d ?? 0,
+    last90d: data.last_90d ?? 0,
   };
 }
 
 // --- Reputation Leaderboard ---
 
 export interface LeaderboardEntry {
-  user_id: string;
+  userId: string;
   username: string;
-  avatar_url: string | null;
+  avatarUrl: string | null;
   score: number;
-  genes_published: number;
-  total_downloads: number;
-  arena_wins: number;
+  genesPublished: number;
+  totalDownloads: number;
+  arenaWins: number;
 }
 
 export async function getReputationLeaderboard(
@@ -331,21 +412,30 @@ export async function getReputationLeaderboard(
     headers: headers(),
     body: JSON.stringify({ p_limit: Math.min(limit, 100) }),
   });
-  return handleResponse<LeaderboardEntry[]>(res);
+  const data = await handleResponse<LeaderboardRow[]>(res);
+  return data.map((row) => ({
+    userId: row.user_id,
+    username: row.username,
+    avatarUrl: row.avatar_url ?? null,
+    score: row.score,
+    genesPublished: row.genes_published,
+    totalDownloads: Number(row.total_downloads),
+    arenaWins: row.arena_wins,
+  }));
 }
 
 // --- Developer Profile ---
 
 export interface DeveloperProfile {
-  user_id: string;
+  userId: string;
   username: string;
-  avatar_url: string | null;
-  created_at: string;
+  avatarUrl: string | null;
+  createdAt: string;
   reputation: {
     score: number;
-    genes_published: number;
-    total_downloads: number;
-    arena_wins: number;
+    genesPublished: number;
+    totalDownloads: number;
+    arenaWins: number;
   } | null;
 }
 
@@ -362,22 +452,24 @@ export async function getDeveloperProfile(
   const res = await fetch(apiUrl(`/profiles?${params}`), {
     headers: headers(),
   });
-  const data = await handleResponse<any[]>(res);
-  if (data.length === 0) throw new Error(`Developer '${username}' not found`);
+  const data = await handleResponse<ProfileRow[]>(res);
+  if (data.length === 0) throw new Error(`Creator '${username}' not found. Use get_leaderboard to find creator usernames.`);
 
   const row = data[0];
-  const rep = row.developer_reputation?.[0] || row.developer_reputation;
+  const rep = Array.isArray(row.developer_reputation)
+    ? row.developer_reputation[0]
+    : row.developer_reputation;
   return {
-    user_id: row.id,
+    userId: row.id,
     username: row.username,
-    avatar_url: row.avatar_url || null,
-    created_at: row.created_at,
+    avatarUrl: row.avatar_url || null,
+    createdAt: row.created_at,
     reputation: rep
       ? {
           score: rep.score,
-          genes_published: rep.genes_published,
-          total_downloads: Number(rep.total_downloads),
-          arena_wins: rep.arena_wins,
+          genesPublished: rep.genes_published,
+          totalDownloads: Number(rep.total_downloads),
+          arenaWins: rep.arena_wins,
         }
       : null,
   };
@@ -389,8 +481,8 @@ export interface GeneVersionEntry {
   id: string;
   version: string;
   changelog: string | null;
-  previous_version_id: string | null;
-  created_at: string;
+  previousVersionId: string | null;
+  createdAt: string;
 }
 
 export async function listGeneVersions(
@@ -399,34 +491,41 @@ export async function listGeneVersions(
 ): Promise<GeneVersionEntry[]> {
   const params = new URLSearchParams();
   params.set("name", `eq.${geneName}`);
-  params.set("published", "eq.true");
-  params.set("select", "id,version,changelog,previous_version_id,created_at,profiles(username)");
+  params.set("select", "id,version,changelog,previous_version_id,created_at,published,owner_id,profiles(username)");
   params.set("order", "created_at.asc");
 
-  const res = await fetch(apiUrl(`/genes?${params}`), { headers: headers() });
-  const data = await handleResponse<any[]>(res);
+  const creds = loadCredentials();
+  const h = creds ? authHeaders() : headers();
+  if (!creds) {
+    params.set("published", "eq.true");
+  }
 
+  const res = await fetch(apiUrl(`/genes?${params}`), { headers: h });
+  const data = await handleResponse<GeneVersionRow[]>(res);
+
+  const userId = creds?.user?.id;
   return data
     .filter((row) => (row.profiles?.username || "").toLowerCase() === ownerName.toLowerCase())
+    .filter((row) => row.published || (userId && row.owner_id === userId))
     .map((row) => ({
       id: row.id,
       version: row.version,
       changelog: row.changelog ?? null,
-      previous_version_id: row.previous_version_id ?? null,
-      created_at: row.created_at,
+      previousVersionId: row.previous_version_id ?? null,
+      createdAt: row.created_at,
     }));
 }
 
 // ── Phase 3: Write operations ──
 
 export interface ArenaSubmitResult {
-  gene_id: string;
+  geneId: string;
   domain: string;
-  fitness_value: number;
-  safety_score: number;
-  success_rate: number;
-  latency_score: number;
-  resource_efficiency: number;
+  fitnessValue: number;
+  safetyScore: number;
+  successRate: number;
+  latencyScore: number;
+  resourceEfficiency: number;
 }
 
 export async function arenaSubmitCloud(
@@ -449,7 +548,6 @@ export async function arenaSubmitCloud(
     success_rate: fitness.success_rate,
     latency_score: fitness.latency_score,
     resource_efficiency: fitness.resource_efficiency,
-    total_calls: 0,
     last_evaluated: new Date().toISOString(),
   };
 
@@ -462,30 +560,30 @@ export async function arenaSubmitCloud(
     body: JSON.stringify(body),
   });
 
-  const data = await handleResponse<any[]>(res);
+  const data = await handleResponse<ArenaEntryRow[]>(res);
   const row = data[0];
   return {
-    gene_id: row.gene_id,
+    geneId: row.gene_id,
     domain: row.domain,
-    fitness_value: row.fitness_value,
-    safety_score: row.safety_score,
-    success_rate: row.success_rate,
-    latency_score: row.latency_score,
-    resource_efficiency: row.resource_efficiency,
+    fitnessValue: row.fitness_value,
+    safetyScore: row.safety_score,
+    successRate: row.success_rate,
+    latencyScore: row.latency_score,
+    resourceEfficiency: row.resource_efficiency,
   };
 }
 
 // ── Gene Reputation ──
 
 export interface GeneReputationResult {
-  gene_id: string;
-  gene_name: string;
+  geneId: string;
+  geneName: string;
   score: number;
-  arena_score: number;
-  usage_score: number;
-  stability_score: number;
+  arenaScore: number;
+  usageScore: number;
+  stabilityScore: number;
   epoch: number;
-  computed_at: string;
+  computedAt: string;
 }
 
 export async function getGeneReputation(geneId: string): Promise<GeneReputationResult> {
@@ -496,7 +594,7 @@ export async function getGeneReputation(geneId: string): Promise<GeneReputationR
   params.set("limit", "1");
 
   const res = await fetch(apiUrl(`/gene_reputation?${params}`), { headers: headers() });
-  const data = await handleResponse<any[]>(res);
+  const data = await handleResponse<GeneReputationRow[]>(res);
 
   if (data.length === 0) {
     const rpcRes = await fetch(rpcUrl("compute_gene_reputation"), {
@@ -506,27 +604,27 @@ export async function getGeneReputation(geneId: string): Promise<GeneReputationR
     });
     const score = await handleResponse<number>(rpcRes);
     return {
-      gene_id: geneId,
-      gene_name: geneId,
+      geneId,
+      geneName: geneId,
       score,
-      arena_score: 0,
-      usage_score: 0,
-      stability_score: 0,
+      arenaScore: 0,
+      usageScore: 0,
+      stabilityScore: 0,
       epoch: 1,
-      computed_at: new Date().toISOString(),
+      computedAt: new Date().toISOString(),
     };
   }
 
   const row = data[0];
   return {
-    gene_id: geneId,
-    gene_name: row.genes?.name || geneId,
+    geneId,
+    geneName: row.genes?.name || geneId,
     score: row.score,
-    arena_score: row.arena_score,
-    usage_score: row.usage_score,
-    stability_score: row.stability_score,
+    arenaScore: row.arena_score,
+    usageScore: row.usage_score,
+    stabilityScore: row.stability_score,
     epoch: row.epoch,
-    computed_at: row.computed_at,
+    computedAt: row.computed_at,
   };
 }
 
@@ -535,10 +633,10 @@ export async function getGeneReputation(geneId: string): Promise<GeneReputationR
 export interface MyReputationResult {
   username: string;
   score: number;
-  genes_published: number;
-  total_downloads: number;
-  arena_wins: number;
-  community_bonus: number;
+  genesPublished: number;
+  totalDownloads: number;
+  arenaWins: number;
+  communityBonus: number;
 }
 
 export async function getMyReputation(): Promise<MyReputationResult> {
@@ -551,16 +649,16 @@ export async function getMyReputation(): Promise<MyReputationResult> {
   const res = await fetch(apiUrl(`/developer_reputation?${params}`), {
     headers: requireAuthHeaders(),
   });
-  const data = await handleResponse<any[]>(res);
+  const data = await handleResponse<DeveloperReputationRow[]>(res);
 
   if (data.length === 0) {
     return {
       username: creds.user.username,
       score: 0,
-      genes_published: 0,
-      total_downloads: 0,
-      arena_wins: 0,
-      community_bonus: 0,
+      genesPublished: 0,
+      totalDownloads: 0,
+      arenaWins: 0,
+      communityBonus: 0,
     };
   }
 
@@ -568,10 +666,10 @@ export async function getMyReputation(): Promise<MyReputationResult> {
   return {
     username: creds.user.username,
     score: row.score,
-    genes_published: row.genes_published,
-    total_downloads: Number(row.total_downloads),
-    arena_wins: row.arena_wins,
-    community_bonus: row.community_bonus ?? 0,
+    genesPublished: row.genes_published,
+    totalDownloads: Number(row.total_downloads),
+    arenaWins: row.arena_wins,
+    communityBonus: row.community_bonus ?? 0,
   };
 }
 
@@ -580,7 +678,7 @@ export async function getMyReputation(): Promise<MyReputationResult> {
 export interface DomainSuggestion {
   domain: string;
   description: string | null;
-  gene_count: number;
+  geneCount: number;
 }
 
 export async function suggestDomain(description: string): Promise<DomainSuggestion[]> {
@@ -589,7 +687,12 @@ export async function suggestDomain(description: string): Promise<DomainSuggesti
     headers: headers(),
     body: JSON.stringify({ p_description: description }),
   });
-  return handleResponse<DomainSuggestion[]>(res);
+  const data = await handleResponse<DomainSuggestionRow[]>(res);
+  return data.map((row) => ({
+    domain: row.domain,
+    description: row.description ?? null,
+    geneCount: row.gene_count,
+  }));
 }
 
 // ── MCP Call Logging (fire-and-forget) ──
@@ -624,11 +727,11 @@ export function logMcpCall(entry: {
 
 export interface McpStatsResult {
   period: string;
-  total_calls: number;
-  success_rate: number;
-  avg_latency_ms: number;
-  top_tools: Array<{ tool_name: string; count: number }>;
-  top_genes: Array<{ gene_id: string; count: number }>;
+  totalCalls: number;
+  successRate: number;
+  avgLatencyMs: number;
+  topTools: Array<{ toolName: string; count: number }>;
+  topGenes: Array<{ geneId: string; count: number }>;
 }
 
 export async function getMcpStats(days: number = 7): Promise<McpStatsResult> {
@@ -641,17 +744,12 @@ export async function getMcpStats(days: number = 7): Promise<McpStatsResult> {
   const res = await fetch(apiUrl(`/mcp_call_log?${params}`), {
     headers: requireAuthHeaders(),
   });
-  const data = await handleResponse<Array<{
-    tool_name: string;
-    gene_id: string | null;
-    success: boolean;
-    latency_ms: number;
-  }>>(res);
+  const data = await handleResponse<McpCallLogRow[]>(res);
 
-  const totalCalls = data.length;
+  const total = data.length;
   const successCount = data.filter((r) => r.success).length;
-  const avgLatency = totalCalls > 0
-    ? Math.round(data.reduce((s, r) => s + r.latency_ms, 0) / totalCalls)
+  const avgLatency = total > 0
+    ? Math.round(data.reduce((s, r) => s + r.latency_ms, 0) / total)
     : 0;
 
   const toolCounts = new Map<string, number>();
@@ -666,39 +764,38 @@ export async function getMcpStats(days: number = 7): Promise<McpStatsResult> {
   const topTools = [...toolCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
-    .map(([tool_name, count]) => ({ tool_name, count }));
+    .map(([toolName, count]) => ({ toolName, count }));
 
   const topGenes = [...geneCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
-    .map(([gene_id, count]) => ({ gene_id, count }));
+    .map(([geneId, count]) => ({ geneId, count }));
 
   return {
     period: `${days}d`,
-    total_calls: totalCalls,
-    success_rate: totalCalls > 0 ? +(successCount / totalCalls).toFixed(4) : 0,
-    avg_latency_ms: avgLatency,
-    top_tools: topTools,
-    top_genes: topGenes,
+    totalCalls: total,
+    successRate: total > 0 ? +(successCount / total).toFixed(4) : 0,
+    avgLatencyMs: avgLatency,
+    topTools,
+    topGenes,
   };
 }
 
 export interface InstallResult {
-  gene_id: string;
+  geneId: string;
   name: string;
   domain: string;
   fidelity: string;
-  installed_to: string;
+  installedTo: string;
 }
 
 export async function installGene(
   geneId: string,
-  projectRoot: string
+  projectRoot: string,
+  shouldForce?: boolean
 ): Promise<InstallResult> {
-  const { writeFileSync, mkdirSync } = require("node:fs") as typeof import("node:fs");
-  const { join } = require("node:path") as typeof import("node:path");
-
   const gene = await getGene(geneId);
+  validateGeneName(gene.name);
 
   const configPath = join(projectRoot, "rotifer.json");
   let genesDir = "genes";
@@ -710,6 +807,11 @@ export async function installGene(
   }
 
   const geneDir = join(projectRoot, genesDir, gene.name);
+
+  if (existsSync(geneDir) && !shouldForce) {
+    throw new Error(`Gene '${gene.name}' already exists at ${geneDir}. Use force=true to overwrite.`);
+  }
+
   mkdirSync(geneDir, { recursive: true });
 
   writeFileSync(
@@ -741,10 +843,10 @@ export async function installGene(
   } catch { /* non-fatal */ }
 
   return {
-    gene_id: gene.id,
+    geneId: gene.id,
     name: gene.name,
     domain: gene.domain,
     fidelity: gene.fidelity,
-    installed_to: geneDir,
+    installedTo: geneDir,
   };
 }

@@ -3,27 +3,31 @@ import { buildOpenCommand } from "../../src/open-browser.js";
 
 describe("buildOpenCommand", () => {
   it("uses 'open' on macOS", () => {
-    const cmd = buildOpenCommand("https://example.com", "darwin");
-    expect(cmd).toBe('open "https://example.com"');
+    const { bin, args } = buildOpenCommand("https://example.com", "darwin");
+    expect(bin).toBe("open");
+    expect(args).toEqual(["https://example.com"]);
   });
 
   it("uses 'xdg-open' on Linux", () => {
-    const cmd = buildOpenCommand("https://example.com", "linux");
-    expect(cmd).toBe('xdg-open "https://example.com"');
+    const { bin, args } = buildOpenCommand("https://example.com", "linux");
+    expect(bin).toBe("xdg-open");
+    expect(args).toEqual(["https://example.com"]);
   });
 
-  it("uses 'start' on Windows", () => {
-    const cmd = buildOpenCommand("https://example.com", "win32");
-    expect(cmd).toBe('start "" "https://example.com"');
+  it("uses 'cmd /c start' on Windows", () => {
+    const { bin, args } = buildOpenCommand("https://example.com", "win32");
+    expect(bin).toBe("cmd");
+    expect(args).toEqual(["/c", "start", "", "https://example.com"]);
   });
 
   it("handles URLs with special characters", () => {
-    const cmd = buildOpenCommand("https://example.com/path?a=1&b=2", "darwin");
-    expect(cmd).toContain("https://example.com/path?a=1&b=2");
+    const { args } = buildOpenCommand("https://example.com/path?a=1&b=2", "darwin");
+    expect(args[0]).toContain("https://example.com/path?a=1&b=2");
   });
 
   it("falls back to xdg-open for unknown platforms", () => {
-    const cmd = buildOpenCommand("https://example.com", "freebsd");
-    expect(cmd).toBe('xdg-open "https://example.com"');
+    const { bin, args } = buildOpenCommand("https://example.com", "freebsd");
+    expect(bin).toBe("xdg-open");
+    expect(args).toEqual(["https://example.com"]);
   });
 });

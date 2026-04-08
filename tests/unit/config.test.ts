@@ -22,7 +22,7 @@ describe("loadCloudConfig", () => {
     const { loadCloudConfig } = await import("../../src/cloud.js");
     const config = loadCloudConfig();
     expect(config.endpoint).toBe("https://cloud.rotifer.dev");
-    expect(config.anonKey).toBeTruthy();
+    expect(config.anonKey).toBe("");
   });
 
   it("reads from cloud.json when it exists", async () => {
@@ -72,7 +72,7 @@ describe("loadCloudConfig", () => {
     const { loadCloudConfig } = await import("../../src/cloud.js");
     const config = loadCloudConfig();
     expect(config.endpoint).toBe("https://partial.example.com");
-    expect(config.anonKey).toBeTruthy();
+    expect(config.anonKey).toBe("");
   });
 
   it("caches config across calls (same reference)", async () => {

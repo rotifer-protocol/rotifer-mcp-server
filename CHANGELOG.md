@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-03-29
+
+### Fixed
+
+- **ESM compatibility** — replaced all `require()` calls with top-level ESM `import` statements; fixes `ReferenceError: require is not defined` in `create_agent`, `agent_run`, `compile_gene`, `run_gene`, `init_gene`, `scan_genes`, `wrap_gene`, `test_gene`, `publish_gene`, `install_gene`, and `logout`
+- **`agent_run` parameter mismatch** — changed from `agent_id` (UUID) to `agent_name` to match CLI's name-based agent lookup
+- **`install_gene` duplicate overwrite** — now checks if gene directory exists before install; use `force: true` to overwrite
+
+### Added
+
+- **CLI parameter parity** — 12 tools updated with missing CLI flags:
+  - `wrap_gene`: `domain`, `fidelity`, `from_skill`, `from_clawhub`
+  - `compile_gene`: `check`, `wasm_path`, `lang`
+  - `publish_gene`: `description`, `changelog`, `skip_security`
+  - `run_gene`: `verbose`, `no_sandbox`, `trust_unsigned`
+  - `install_gene`: `force`
+  - `init_gene`: `domain`, `no_genesis`
+  - `scan_genes`: `skills`, `skills_path`
+  - `test_gene`: `verbose`, `compliance` (name now required)
+  - `login`: `endpoint`
+  - `create_agent`: `domain`, `top`, `strategy`, `par_merge`; composition expanded to `Cond`, `TryPool`
+  - `search_genes`: sort values aligned with CLI (`popular`, `fitness`)
+  - `agent_run`: parameter corrected from UUID to name
+
+- **`vg_scan` tool** — V(g) security scanner exposed via MCP; static analysis returns grade (A/B/C/D/?), findings with severity/file/line/snippet, and scan stats; enables AI Agents to perform automated security audits on Gene/Skill code
+
+### Changed
+
+- README rewritten with full 29-tool catalog, grouped by function
+- `rotifer://local/agents` resource now documented
+
 ## [0.8.1] - 2026-03-28
 
 ### Changed
@@ -35,7 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`get_gene_reputation` tool** — detailed reputation breakdown for a gene (code quality, test coverage, documentation, community)
-- **`get_my_reputation` tool** — current user's developer reputation and contribution summary
+- **`get_my_reputation` tool** — current user's creator reputation and contribution summary
 - **`suggest_domain` tool** — AI-powered domain suggestions based on natural language description
 
 ### Fixed
@@ -101,7 +132,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- 3 new tools: `get_gene_stats` (download statistics by time period), `get_leaderboard` (developer reputation rankings), `get_developer_profile` (developer profile + reputation data)
+- 3 new tools: `get_gene_stats` (download statistics by time period), `get_leaderboard` (creator reputation rankings), `get_developer_profile` (creator profile + reputation data)
 - 1 new tool: `list_local_genes` (scan local workspace for installed Genes with metadata, compile status, and cloud origin)
 - MCP Resources support with 5 resource templates: `rotifer://genes/{id}/stats`, `rotifer://genes/{id}`, `rotifer://developers/{username}`, `rotifer://leaderboard`, `rotifer://local/genes`
 - Comprehensive test suite (139 tests): unit, integration, protocol, security, and resilience layers using Vitest
@@ -148,6 +179,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero-config mode with built-in defaults for public Cloud API
 - Support for `npx @rotifer/mcp-server` execution
 
+[0.8.2]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.8.2
+[0.8.1]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.8.1
+[0.8.0]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.8.0
+[0.7.9]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.7.9
+[0.7.8]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.7.8
+[0.7.7]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.7.7
+[0.7.6]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.7.6
+[0.7.5]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.7.5
+[0.7.1]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.7.1
+[0.7.0]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.7.0
+[0.4.0]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.4.0
 [0.3.0]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.3.0
 [0.2.0]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.2.0
 [0.1.2]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.1.2

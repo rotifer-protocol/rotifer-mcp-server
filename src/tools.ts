@@ -1,6 +1,7 @@
 import {
   listGenes,
   getGene,
+  getGeneByContentHash,
   getArenaRankings,
   getGeneStatsRpc,
   getReputationLeaderboard,
@@ -33,9 +34,15 @@ import {
   clearCredentials,
   generateCodeVerifier,
   generateCodeChallenge,
-  waitForOAuthCallback,
+  startOAuthCallbackServer,
 } from "./auth.js";
 import { openBrowser } from "./open-browser.js";
+import { validateGeneName } from "./validate-gene-name.js";
+
+const SORT_ALIAS: Record<string, string> = {
+  popular: "downloads",
+  fitness: "reputation",
+};
 
 export async function searchGenes(args: {
   query?: string;
@@ -45,19 +52,23 @@ export async function searchGenes(args: {
   page?: number;
   perPage?: number;
 }): Promise<GeneListResult> {
+  const rpcSort = args.sort ? (SORT_ALIAS[args.sort] || args.sort) : undefined;
   return listGenes({
     query: args.query,
     domain: args.domain,
     fidelity: args.fidelity,
-    sort: args.sort,
+    sort: rpcSort,
     page: args.page || 1,
     perPage: Math.min(args.perPage || 20, 50),
   });
 }
 
-export async function getGeneDetail(args: { id: string }): Promise<Gene & { phenotype: Record<string, unknown> }> {
-  if (!args.id) throw new Error("Gene id is required");
-  return getGene(args.id);
+export async function getGeneDetail(args: { gene_id?: string; content_hash?: string }): Promise<Gene & { phenotype: Record<string, unknown> }> {
+  if (args.content_hash) {
+    return getGeneByContentHash(args.content_hash);
+  }
+  if (!args.gene_id) throw new Error("Either gene_id or content_hash is required. Use search_genes to find gene IDs.");
+  return getGene(args.gene_id);
 }
 
 export async function arenaRankings(args: {
@@ -72,10 +83,10 @@ export async function arenaRankings(args: {
   });
 }
 
-export async function geneStats(args: { gene_id: string }): Promise<GeneStats & { gene_id: string }> {
-  if (!args.gene_id) throw new Error("gene_id is required");
+export async function geneStats(args: { gene_id: string }): Promise<GeneStats & { geneId: string }> {
+  if (!args.gene_id) throw new Error("gene_id is required. Use search_genes to find gene IDs.");
   const stats = await getGeneStatsRpc(args.gene_id);
-  return { gene_id: args.gene_id, ...stats };
+  return { geneId: args.gene_id, ...stats };
 }
 
 export async function leaderboard(args: {
@@ -88,11 +99,11 @@ export async function leaderboard(args: {
 export async function developerProfile(args: {
   username: string;
 }): Promise<DeveloperProfile> {
-  if (!args.username) throw new Error("username is required");
+  if (!args.username) throw new Error("username is required. Use get_leaderboard to find creator usernames.");
   return getDeveloperProfile(args.username);
 }
 
-export { listLocalGenes, listLocalAgents, createLocalAgent, agentRun, compileGene, runGene, initGene, scanGenes, wrapGene, testGene, publishGene } from "./local.js";
+export { listLocalGenes, listLocalAgents, createLocalAgent, agentRun, compileGene, runGene, initGene, scanGenes, wrapGene, testGene, publishGene, vgScan } from "./local.js";
 
 export async function mcpStats(args: {
   days?: number;
@@ -102,10 +113,11 @@ export async function mcpStats(args: {
 
 export async function geneVersions(args: {
   owner: string;
-  name: string;
+  gene_name: string;
 }): Promise<{ versions: GeneVersionEntry[]; count: number }> {
-  if (!args.owner || !args.name) throw new Error("owner and name are required");
-  const versions = await listGeneVersionsCloud(args.owner, args.name);
+  if (!args.owner || !args.gene_name) throw new Error("owner and gene_name are required. Format: owner='username', gene_name='gene-name'.");
+  validateGeneName(args.gene_name);
+  const versions = await listGeneVersionsCloud(args.owner, args.gene_name);
   return { versions, count: versions.length };
 }
 
@@ -114,7 +126,7 @@ export async function geneVersions(args: {
 export async function geneReputation(args: {
   gene_id: string;
 }): Promise<GeneReputationResult> {
-  if (!args.gene_id) throw new Error("gene_id is required");
+  if (!args.gene_id) throw new Error("gene_id is required. Use search_genes to find gene IDs.");
   return getGeneReputationCloud(args.gene_id);
 }
 
@@ -133,23 +145,23 @@ export async function domainSuggestion(args: {
 // ── Auth tools ──
 
 export interface AuthStatusResult {
-  logged_in: boolean;
+  isLoggedIn: boolean;
   username: string | null;
   provider: string | null;
-  expires_in_minutes: number | null;
+  expiresInMinutes: number | null;
 }
 
 export function authStatus(): AuthStatusResult {
   const creds = loadCredentials();
   if (!creds) {
-    return { logged_in: false, username: null, provider: null, expires_in_minutes: null };
+    return { isLoggedIn: false, username: null, provider: null, expiresInMinutes: null };
   }
   const remaining = Math.max(0, Math.round((creds.expires_at - Date.now()) / 60_000));
   return {
-    logged_in: true,
+    isLoggedIn: true,
     username: creds.user.username,
     provider: creds.provider,
-    expires_in_minutes: remaining,
+    expiresInMinutes: remaining,
   };
 }
 
@@ -162,6 +174,7 @@ export interface LoginResult {
 
 export async function login(args: {
   provider?: string;
+  endpoint?: string;
 }): Promise<LoginResult> {
   const existing = loadCredentials();
   if (existing) {
@@ -175,9 +188,11 @@ export async function login(args: {
 
   const provider = (args.provider || "github") as "github" | "gitlab";
   const config = loadCloudConfig();
-  const callbackPort = 9876;
+  if (args.endpoint) config.endpoint = args.endpoint;
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = generateCodeChallenge(codeVerifier);
+
+  const { port: callbackPort, waitForCallback } = await startOAuthCallbackServer();
 
   const authUrl =
     `${config.endpoint}/auth/v1/authorize?provider=${provider}` +
@@ -188,7 +203,7 @@ export async function login(args: {
   openBrowser(authUrl);
 
   try {
-    const callbackResult = await waitForOAuthCallback(callbackPort);
+    const callbackResult = await waitForCallback;
 
     let accessToken: string;
     let refreshToken: string;
@@ -260,6 +275,14 @@ export function logout(): LogoutResult {
   return { success: true, message: `Logged out (was: ${existing.user.username} via ${existing.provider}).` };
 }
 
+function validateScore(name: string, value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 1) {
+    throw new Error(`${name} must be a number between 0 and 1, got: ${value}`);
+  }
+  return n;
+}
+
 export async function submitToArena(args: {
   gene_id: string;
   fitness_value: number;
@@ -268,68 +291,65 @@ export async function submitToArena(args: {
   latency_score: number;
   resource_efficiency: number;
 }): Promise<ArenaSubmitResult> {
-  if (!args.gene_id) throw new Error("gene_id is required");
+  if (!args.gene_id) throw new Error("gene_id is required. Use search_genes to find gene IDs.");
   return arenaSubmitCloud(args.gene_id, {
-    value: args.fitness_value,
-    safety_score: args.safety_score,
-    success_rate: args.success_rate,
-    latency_score: args.latency_score,
-    resource_efficiency: args.resource_efficiency,
+    value: validateScore("fitness_value", args.fitness_value),
+    safety_score: validateScore("safety_score", args.safety_score),
+    success_rate: validateScore("success_rate", args.success_rate),
+    latency_score: validateScore("latency_score", args.latency_score),
+    resource_efficiency: validateScore("resource_efficiency", args.resource_efficiency),
   });
 }
 
 export async function installGeneFromCloud(args: {
   gene_id: string;
   project_root?: string;
+  force?: boolean;
 }): Promise<InstallResult> {
-  if (!args.gene_id) throw new Error("gene_id is required");
-  return installGene(args.gene_id, args.project_root || process.cwd());
+  if (!args.gene_id) throw new Error("gene_id is required. Use search_genes to find gene IDs.");
+  return installGene(args.gene_id, args.project_root || process.cwd(), args.force);
 }
 
 export async function compareGenes(args: {
   gene_ids: string[];
 }): Promise<{
   comparison: Array<{
-    gene_id: string;
-    gene_name: string;
+    geneId: string;
+    geneName: string;
     domain: string;
     fidelity: string;
-    fitness: number | null;
-    safety: number | null;
-    reputation_score: number | null;
+    reputationScore: number | null;
     downloads: number;
   }>;
   recommendation: string;
 }> {
   if (!args.gene_ids || args.gene_ids.length < 2) {
-    throw new Error("At least 2 gene_ids required for comparison");
+    throw new Error("At least 2 gene_ids required for comparison. Provide 2-5 gene UUIDs.");
   }
   if (args.gene_ids.length > 5) {
-    throw new Error("Maximum 5 genes can be compared at once");
+    throw new Error("Maximum 5 genes can be compared at once. Provide 2-5 gene UUIDs.");
   }
 
   const genes = await Promise.all(args.gene_ids.map((id) => getGene(id)));
 
   const comparison = genes.map((g) => ({
-    gene_id: g.id,
-    gene_name: g.name,
+    geneId: g.id,
+    geneName: g.name,
     domain: g.domain,
     fidelity: g.fidelity,
-    fitness: g.reputation_score,
-    safety: null as number | null,
-    reputation_score: g.reputation_score,
+    reputationScore: g.reputationScore,
     downloads: g.downloads,
   }));
 
   const sorted = [...comparison].sort(
-    (a, b) => (b.reputation_score || 0) - (a.reputation_score || 0)
+    (a, b) => (b.reputationScore || 0) - (a.reputationScore || 0)
   );
   const best = sorted[0];
 
   return {
     comparison,
     recommendation: best
-      ? `Based on available metrics, "${best.gene_name}" has the highest score (${best.reputation_score ?? "N/A"}). Use Arena rankings for authoritative F(g)-based comparison within a domain.`
+      ? `Based on available metrics, "${best.geneName}" has the highest score (${best.reputationScore ?? "N/A"}). Use Arena rankings for authoritative F(g)-based comparison within a domain.`
       : "Insufficient data for recommendation.",
   };
 }

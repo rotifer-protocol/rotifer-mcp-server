@@ -64,7 +64,7 @@ describe("search_genes", { timeout: 15000 }, () => {
 describe("get_gene_detail", { timeout: 15000 }, () => {
   it("returns gene with phenotype", async () => {
     const search = await searchGenes({ perPage: 1 });
-    const g = await getGeneDetail({ id: search.genes[0].id });
+    const g = await getGeneDetail({ gene_id: search.genes[0].id });
     expect(g.id).toBe(search.genes[0].id);
     expect(g.name).toBeTruthy();
     expect(g.phenotype).toBeDefined();
@@ -72,12 +72,12 @@ describe("get_gene_detail", { timeout: 15000 }, () => {
 
   it("throws on invalid gene id", async () => {
     await expect(
-      getGeneDetail({ id: "00000000-0000-0000-0000-000000000000" })
+      getGeneDetail({ gene_id: "00000000-0000-0000-0000-000000000000" })
     ).rejects.toThrow("not found");
   });
 
   it("throws on empty id", async () => {
-    await expect(getGeneDetail({ id: "" })).rejects.toThrow("required");
+    await expect(getGeneDetail({ gene_id: "" })).rejects.toThrow("required");
   });
 });
 
@@ -101,7 +101,7 @@ describe("get_arena_rankings", { timeout: 15000 }, () => {
     if (r.rankings.length > 0) {
       const e = r.rankings[0];
       expect(typeof e.rank).toBe("number");
-      expect(typeof e.gene_id).toBe("string");
+      expect(typeof e.geneId).toBe("string");
       expect(typeof e.fitness).toBe("number");
     }
   });
@@ -112,17 +112,17 @@ describe("get_gene_stats", { timeout: 15000 }, () => {
     const search = await searchGenes({ perPage: 1 });
     const r = await geneStats({ gene_id: search.genes[0].id });
     expect(typeof r.total).toBe("number");
-    expect(typeof r.last_7d).toBe("number");
-    expect(r.last_7d).toBeLessThanOrEqual(r.last_30d);
-    expect(r.last_30d).toBeLessThanOrEqual(r.last_90d);
+    expect(typeof r.last7d).toBe("number");
+    expect(r.last7d).toBeLessThanOrEqual(r.last30d);
+    expect(r.last30d).toBeLessThanOrEqual(r.last90d);
   });
 
   it("returns zero stats for non-existent gene", async () => {
     const r = await geneStats({ gene_id: "00000000-0000-0000-0000-000000000000" });
     expect(r.total).toBe(0);
-    expect(r.last_7d).toBe(0);
-    expect(r.last_30d).toBe(0);
-    expect(r.last_90d).toBe(0);
+    expect(r.last7d).toBe(0);
+    expect(r.last30d).toBe(0);
+    expect(r.last90d).toBe(0);
   });
 });
 
@@ -142,7 +142,7 @@ describe("get_leaderboard", { timeout: 15000 }, () => {
     const r = await leaderboard({ limit: 3 });
     if (r.developers.length > 0) {
       const d = r.developers[0];
-      expect(typeof d.user_id).toBe("string");
+      expect(typeof d.userId).toBe("string");
       expect(typeof d.username).toBe("string");
       expect(typeof d.score).toBe("number");
     }
@@ -155,8 +155,8 @@ describe("get_developer_profile", { timeout: 15000 }, () => {
     const owner = search.genes[0].owner;
     const p = await developerProfile({ username: owner });
     expect(p.username).toBe(owner);
-    expect(typeof p.user_id).toBe("string");
-    expect(typeof p.created_at).toBe("string");
+    expect(typeof p.userId).toBe("string");
+    expect(typeof p.createdAt).toBe("string");
   });
 
   it("throws on nonexistent username", async () => {
@@ -200,8 +200,8 @@ describe.skipIf(!hasPlayground)("list_local_genes", () => {
       expect(g.name).toBeTruthy();
       expect(g.domain).toBeTruthy();
       expect(typeof g.fidelity).toBe("string");
-      expect(typeof g.has_wasm).toBe("boolean");
-      expect(typeof g.has_source).toBe("boolean");
+      expect(typeof g.hasWasm).toBe("boolean");
+      expect(typeof g.hasSource).toBe("boolean");
     }
   });
 

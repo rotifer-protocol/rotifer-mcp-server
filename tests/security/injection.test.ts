@@ -53,7 +53,7 @@ describe("gene ID injection", { timeout: 15000 }, () => {
 
   for (const payload of idPayloads) {
     it(`safely rejects: ${payload}`, async () => {
-      await expect(getGeneDetail({ id: payload })).rejects.toThrow();
+      await expect(getGeneDetail({ gene_id: payload })).rejects.toThrow();
     });
   }
 });

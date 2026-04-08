@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { createServer } from "node:http";
 import { randomBytes, createHash } from "node:crypto";
@@ -58,7 +58,6 @@ export function saveCredentials(creds: CloudCredentials): void {
 export function clearCredentials(): void {
   const path = credentialsPath();
   if (existsSync(path)) {
-    const { unlinkSync } = require("node:fs") as typeof import("node:fs");
     unlinkSync(path);
   }
 }
@@ -72,13 +71,25 @@ export function generateCodeChallenge(verifier: string): string {
 }
 
 /**
- * Start a local HTTP server to receive the OAuth callback.
- * Handles both PKCE flow (?code=...) and implicit flow (#access_token=...).
+ * Start a local OAuth callback server on a random port (127.0.0.1:0).
+ * Returns the bound port immediately so the caller can construct the auth URL,
+ * plus a promise that resolves when the callback arrives.
  */
-export function waitForOAuthCallback(port: number = 9876): Promise<string> {
+export async function startOAuthCallbackServer(): Promise<{
+  port: number;
+  waitForCallback: Promise<string>;
+}> {
   return new Promise((resolve, reject) => {
+    let callbackResolve: (value: string) => void;
+    let callbackReject: (reason: Error) => void;
+    const waitForCallback = new Promise<string>((res, rej) => {
+      callbackResolve = res;
+      callbackReject = rej;
+    });
+
     const server = createServer((req, res) => {
-      const url = new URL(req.url || "/", `http://localhost:${port}`);
+      const boundPort = (server.address() as { port: number })?.port || 0;
+      const url = new URL(req.url || "/", `http://localhost:${boundPort}`);
 
       if (url.pathname === "/callback/token") {
         const token = url.searchParams.get("access_token");
@@ -91,7 +102,7 @@ export function waitForOAuthCallback(port: number = 9876): Promise<string> {
               "</body></html>"
           );
           server.close();
-          resolve(`implicit:${token}:${refresh || ""}`);
+          callbackResolve(`implicit:${token}:${refresh || ""}`);
           return;
         }
       }
@@ -105,7 +116,7 @@ export function waitForOAuthCallback(port: number = 9876): Promise<string> {
             "</body></html>"
         );
         server.close();
-        resolve(code);
+        callbackResolve(code);
       } else {
         res.writeHead(200, { "Content-Type": "text/html" });
         res.end(`<html><body><script>
@@ -125,8 +136,9 @@ if (window.location.hash) {
       }
     });
 
-    server.listen(port, () => {
-      // Server ready
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address() as { port: number };
+      resolve({ port: addr.port, waitForCallback });
     });
 
     server.on("error", (err) => {
@@ -135,7 +147,7 @@ if (window.location.hash) {
 
     setTimeout(() => {
       server.close();
-      reject(new Error("Login timed out after 120 seconds"));
+      callbackReject(new Error("Login timed out after 120 seconds"));
     }, 120_000);
   });
 }

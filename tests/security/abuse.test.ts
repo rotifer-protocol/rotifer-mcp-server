@@ -13,7 +13,7 @@ describe("oversized input", { timeout: 15000 }, () => {
   });
 
   it("handles 1000-char gene_id", async () => {
-    await expect(getGeneDetail({ id: "x".repeat(1000) })).rejects.toThrow();
+    await expect(getGeneDetail({ gene_id: "x".repeat(1000) })).rejects.toThrow();
   });
 
   it("handles 1000-char username", async () => {
@@ -102,7 +102,7 @@ describe("empty strings", { timeout: 15000 }, () => {
   });
 
   it("getGeneDetail id='' throws", async () => {
-    await expect(getGeneDetail({ id: "" })).rejects.toThrow("required");
+    await expect(getGeneDetail({ gene_id: "" })).rejects.toThrow("required");
   });
 });
 
@@ -132,8 +132,8 @@ describe("write operation input abuse", { timeout: 15000 }, () => {
 
   it("authStatus returns valid structure without crashing", () => {
     const result = authStatus();
-    expect(typeof result.logged_in).toBe("boolean");
-    if (result.logged_in) {
+    expect(typeof result.isLoggedIn).toBe("boolean");
+    if (result.isLoggedIn) {
       expect(typeof result.username).toBe("string");
     } else {
       expect(result.username).toBeNull();

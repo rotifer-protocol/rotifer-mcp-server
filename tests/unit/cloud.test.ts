@@ -10,7 +10,7 @@ vi.mock("../../src/auth.js", () => ({
   clearCredentials: vi.fn(),
   generateCodeVerifier: vi.fn(),
   generateCodeChallenge: vi.fn(),
-  waitForOAuthCallback: vi.fn(),
+  startOAuthCallbackServer: vi.fn(),
 }));
 
 const mockFetch = vi.fn();
@@ -110,13 +110,14 @@ describe("getGene", () => {
         id: "abc", name: "test", domain: "d", version: "1", fidelity: "Native",
         description: "desc", phenotype: { input: {} }, wasm_size: 100, downloads: 5,
         reputation_score: null, created_at: "2026-01-01", updated_at: "2026-01-02",
+        published: true, owner_id: "u1",
         profiles: { username: "owner1" },
       }])
     );
     const gene = await getGene("abc");
     expect(gene.phenotype).toEqual({ input: {} });
     expect(gene.owner).toBe("owner1");
-    expect(gene.reputation_score).toBeNull();
+    expect(gene.reputationScore).toBeNull();
   });
 });
 
@@ -143,10 +144,10 @@ describe("getArenaRankings", () => {
     );
     const result = await getArenaRankings({});
     expect(result.rankings[0].rank).toBe(1);
-    expect(result.rankings[0].total_calls).toBe(50);
-    expect(result.rankings[0].success_rate).toBe(0.95);
-    expect(result.rankings[0].latency_score).toBe(0.7);
-    expect(result.rankings[0].resource_efficiency).toBe(0.85);
+    expect(result.rankings[0].totalCalls).toBe(50);
+    expect(result.rankings[0].successRate).toBe(0.95);
+    expect(result.rankings[0].latencyScore).toBe(0.7);
+    expect(result.rankings[0].resourceEfficiency).toBe(0.85);
   });
 });
 
@@ -157,7 +158,7 @@ describe("getGeneStatsRpc", () => {
     );
     const stats = await getGeneStatsRpc("abc");
     expect(stats.total).toBe(100);
-    expect(stats.last_7d).toBe(10);
+    expect(stats.last7d).toBe(10);
   });
 
   it("throws on error field in response", async () => {
@@ -173,7 +174,7 @@ describe("getGeneStatsRpc", () => {
     );
     const stats = await getGeneStatsRpc("abc");
     expect(stats.total).toBe(0);
-    expect(stats.last_7d).toBe(0);
+    expect(stats.last7d).toBe(0);
   });
 });
 
@@ -189,7 +190,7 @@ describe("getReputationLeaderboard", () => {
     const data = [{ user_id: "u1", username: "dev", avatar_url: null, score: 5, genes_published: 2, total_downloads: 10, arena_wins: 1 }];
     mockFetch.mockResolvedValueOnce(mockResponse(data));
     const result = await getReputationLeaderboard(5);
-    expect(result).toEqual(data);
+    expect(result).toEqual([{ userId: "u1", username: "dev", avatarUrl: null, score: 5, genesPublished: 2, totalDownloads: 10, arenaWins: 1 }]);
   });
 });
 
@@ -208,7 +209,7 @@ describe("getDeveloperProfile", () => {
     );
     const profile = await getDeveloperProfile("dev");
     expect(profile.reputation?.score).toBe(5);
-    expect(profile.reputation?.total_downloads).toBe(10);
+    expect(profile.reputation?.totalDownloads).toBe(10);
   });
 
   it("handles missing developer_reputation gracefully", async () => {
@@ -230,6 +231,7 @@ describe("arenaSubmitCloud", () => {
         id: "gene-1", name: "test", domain: "d", version: "1", fidelity: "Native",
         description: "desc", phenotype: {}, wasm_size: 100, downloads: 5,
         reputation_score: null, created_at: "2026-01-01", updated_at: "2026-01-02",
+        published: true, owner_id: "u1",
         profiles: { username: "owner1" },
       }])
     );
@@ -245,8 +247,8 @@ describe("arenaSubmitCloud", () => {
       latency_score: 0.7, resource_efficiency: 0.85,
     });
 
-    expect(result.gene_id).toBe("gene-1");
-    expect(result.fitness_value).toBe(0.9);
+    expect(result.geneId).toBe("gene-1");
+    expect(result.fitnessValue).toBe(0.9);
     expect(mockFetch).toHaveBeenCalledTimes(2);
     const postUrl = mockFetch.mock.calls[1][0] as string;
     expect(postUrl).toContain("/arena_entries");
@@ -267,6 +269,7 @@ describe("arenaSubmitCloud", () => {
         id: "g1", name: "t", domain: "d", version: "1", fidelity: "Native",
         description: "d", phenotype: {}, wasm_size: 0, downloads: 0,
         reputation_score: null, created_at: "2026-01-01", updated_at: "2026-01-01",
+        published: true, owner_id: "u1",
         profiles: { username: "u" },
       }])
     );

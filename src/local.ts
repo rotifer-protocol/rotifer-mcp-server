@@ -1,5 +1,7 @@
-import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, basename } from "node:path";
+import { randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
 
 interface RotiferConfig {
   genes_dir: string;
@@ -30,6 +32,7 @@ interface CompileResult {
   irHash: string;
   wasmAvailable: boolean;
   compiledAt: string;
+  wasmSize?: number;
   totalSize?: number;
 }
 
@@ -41,15 +44,15 @@ export interface LocalGene {
   version: string | null;
   author: string | null;
   description: string | null;
-  has_wasm: boolean;
-  has_source: boolean;
+  hasWasm: boolean;
+  hasSource: boolean;
   cloud?: { id: string; owner: string; version: string };
-  compiled?: { ir_hash: string; compiled_at: string; wasm_size: number | null };
+  compiled?: { irHash: string; compiledAt: string; wasmSize: number | null };
 }
 
 export interface ListLocalGenesResult {
-  project_root: string;
-  genes_dir: string;
+  projectRoot: string;
+  genesDir: string;
   genes: LocalGene[];
   total: number;
 }
@@ -81,7 +84,7 @@ export function listLocalGenes(options: {
   const genesDir = resolveGenesDir(root);
 
   if (!existsSync(genesDir)) {
-    return { project_root: root, genes_dir: genesDir, genes: [], total: 0 };
+    return { projectRoot: root, genesDir, genes: [], total: 0 };
   }
 
   let entries: string[];
@@ -91,7 +94,7 @@ export function listLocalGenes(options: {
       return statSync(p).isDirectory() && existsSync(join(p, "phenotype.json"));
     });
   } catch {
-    return { project_root: root, genes_dir: genesDir, genes: [], total: 0 };
+    return { projectRoot: root, genesDir, genes: [], total: 0 };
   }
 
   let genes: LocalGene[] = entries.map((name) => {
@@ -108,16 +111,16 @@ export function listLocalGenes(options: {
       version: phenotype?.version || cloud?.version || null,
       author: phenotype?.author || cloud?.owner || null,
       description: phenotype?.description || null,
-      has_wasm: existsSync(join(geneDir, "gene.ir.wasm")),
-      has_source: existsSync(join(geneDir, "index.ts")),
+      hasWasm: existsSync(join(geneDir, "gene.ir.wasm")),
+      hasSource: existsSync(join(geneDir, "index.ts")),
       ...(cloud && {
         cloud: { id: cloud.cloud_id, owner: cloud.owner, version: cloud.version },
       }),
       ...(compiled && {
         compiled: {
-          ir_hash: compiled.irHash,
-          compiled_at: compiled.compiledAt,
-          wasm_size: compiled.totalSize ?? null,
+          irHash: compiled.irHash,
+          compiledAt: compiled.compiledAt,
+          wasmSize: compiled.wasmSize ?? compiled.totalSize ?? null,
         },
       }),
     };
@@ -132,7 +135,7 @@ export function listLocalGenes(options: {
 
   genes.sort((a, b) => a.domain.localeCompare(b.domain) || a.name.localeCompare(b.name));
 
-  return { project_root: root, genes_dir: genesDir, genes, total: genes.length };
+  return { projectRoot: root, genesDir, genes, total: genes.length };
 }
 
 // ── Local Agent scanning ──
@@ -144,13 +147,13 @@ export interface LocalAgent {
   genome: string[];
   composition: Record<string, unknown>;
   strategy: string;
-  created_at: string;
+  createdAt: string;
   reputation: number;
 }
 
 export interface ListLocalAgentsResult {
-  project_root: string;
-  agents_dir: string;
+  projectRoot: string;
+  agentsDir: string;
   agents: LocalAgent[];
   total: number;
 }
@@ -163,14 +166,14 @@ export function listLocalAgents(options: {
   const agentsDir = join(root, ".rotifer", "agents");
 
   if (!existsSync(agentsDir)) {
-    return { project_root: root, agents_dir: agentsDir, agents: [], total: 0 };
+    return { projectRoot: root, agentsDir, agents: [], total: 0 };
   }
 
   let files: string[];
   try {
     files = readdirSync(agentsDir).filter((f) => f.endsWith(".json"));
   } catch {
-    return { project_root: root, agents_dir: agentsDir, agents: [], total: 0 };
+    return { projectRoot: root, agentsDir, agents: [], total: 0 };
   }
 
   let agents: LocalAgent[] = files
@@ -184,7 +187,7 @@ export function listLocalAgents(options: {
         genome: Array.isArray(raw.genome) ? raw.genome : [],
         composition: raw.composition || { type: "Single" },
         strategy: raw.strategy || "manual",
-        created_at: raw.createdAt || raw.created_at || "",
+        createdAt: raw.createdAt || raw.created_at || "",
         reputation: raw.reputation ?? 0,
       } satisfies LocalAgent;
     })
@@ -197,10 +200,10 @@ export function listLocalAgents(options: {
   }
 
   agents.sort(
-    (a, b) => (b.created_at || "").localeCompare(a.created_at || "")
+    (a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")
   );
 
-  return { project_root: root, agents_dir: agentsDir, agents, total: agents.length };
+  return { projectRoot: root, agentsDir, agents, total: agents.length };
 }
 
 // ── Agent creation ──
@@ -212,24 +215,29 @@ export interface CreateAgentResult {
   genome: string[];
   composition: Record<string, unknown>;
   strategy: string;
-  created_at: string;
+  createdAt: string;
 }
 
 export function createLocalAgent(options: {
   project_root?: string;
-  name: string;
-  genes: string[];
+  agent_name: string;
+  gene_ids?: string[];
   composition?: string;
+  domain?: string;
+  strategy?: string;
+  par_merge?: string;
 }): CreateAgentResult {
-  const { randomUUID } = require("node:crypto") as typeof import("node:crypto");
-  const { writeFileSync, mkdirSync } = require("node:fs") as typeof import("node:fs");
-
   const root = resolveProjectRoot(options.project_root);
   const genesDir = resolveGenesDir(root);
   const agentsDir = join(root, ".rotifer", "agents");
   mkdirSync(agentsDir, { recursive: true });
 
-  for (const geneName of options.genes) {
+  const genes = options.gene_ids || [];
+  if (genes.length === 0) {
+    throw new Error("'gene_ids' is required with at least one gene name. Wrap genes first with 'rotifer wrap <gene-name>'.");
+  }
+
+  for (const geneName of genes) {
     const phenoPath = join(genesDir, geneName, "phenotype.json");
     if (!existsSync(phenoPath)) {
       throw new Error(`Gene '${geneName}' not found at ${phenoPath}. Run 'rotifer wrap ${geneName}' first.`);
@@ -237,26 +245,32 @@ export function createLocalAgent(options: {
   }
 
   const agentId = randomUUID();
-  const compositionType = options.genes.length >= 2
+  const compositionType = genes.length >= 2
     ? (options.composition || "Seq")
-    : "Single";
+    : (genes.length === 1 ? "Single" : (options.composition || "Seq"));
 
+  const mergeStrategy = options.par_merge || "first";
   let composition: Record<string, unknown> = { type: compositionType };
   if (compositionType === "Par") {
-    composition = { type: "Par", branches: options.genes, merge: "first" };
-  } else if (compositionType === "Try" && options.genes.length >= 2) {
-    composition = { type: "Try", primary: options.genes[0], fallback: options.genes[1] };
+    composition = { type: "Par", branches: genes, merge: mergeStrategy };
+  } else if (compositionType === "Try" && genes.length >= 2) {
+    composition = { type: "Try", primary: genes[0], fallback: genes[1] };
+  } else if (compositionType === "Cond" && genes.length >= 2) {
+    composition = { type: "Cond", thenBranch: genes[0], elseBranch: genes[1] };
+  } else if (compositionType === "TryPool") {
+    composition = { type: "TryPool", pool: genes };
   }
 
   const agent = {
     id: agentId,
-    name: options.name,
+    name: options.agent_name,
     state: "Active",
-    genome: options.genes,
+    genome: genes,
     composition,
-    strategy: "manual",
+    strategy: options.strategy || "manual",
     createdAt: new Date().toISOString(),
     reputation: 0.0,
+    ...(options.domain && { domain: options.domain }),
   };
 
   writeFileSync(
@@ -271,7 +285,7 @@ export function createLocalAgent(options: {
     genome: agent.genome,
     composition: agent.composition,
     strategy: agent.strategy,
-    created_at: agent.createdAt,
+    createdAt: agent.createdAt,
   };
 }
 
@@ -279,13 +293,12 @@ export function createLocalAgent(options: {
 
 export interface ShellResult {
   success: boolean;
-  exit_code: number;
+  exitCode: number;
   stdout: string;
   stderr: string;
 }
 
 function shellExec(cmd: string, args: string[], cwd?: string): ShellResult {
-  const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
   const result = spawnSync(cmd, args, {
     cwd: cwd || process.cwd(),
     timeout: 120_000,
@@ -294,7 +307,7 @@ function shellExec(cmd: string, args: string[], cwd?: string): ShellResult {
   });
   return {
     success: result.status === 0,
-    exit_code: result.status ?? 1,
+    exitCode: result.status ?? 1,
     stdout: (result.stdout || "").trim(),
     stderr: (result.stderr || "").trim(),
   };
@@ -315,101 +328,156 @@ function rotiferCmd(args: string[], cwd?: string): ShellResult {
 }
 
 export function agentRun(options: {
-  agent_id: string;
+  agent_name: string;
   project_root?: string;
   input?: string;
+  verbose?: boolean;
+  no_sandbox?: boolean;
 }): ShellResult {
   const root = resolveProjectRoot(options.project_root);
-  const args = ["agent", "run", options.agent_id];
+  const args = ["agent", "run", options.agent_name];
   if (options.input) {
     args.push("--input", options.input);
   }
+  if (options.verbose) args.push("--isVerbose");
+  if (options.no_sandbox) args.push("--no-sandbox");
   return rotiferCmd(args, root);
 }
 
 export function compileGene(options: {
   gene_name: string;
   project_root?: string;
+  check?: boolean;
+  wasm_path?: string;
+  lang?: string;
 }): ShellResult {
   const root = resolveProjectRoot(options.project_root);
-  return rotiferCmd(["compile", options.gene_name], root);
+  const args = ["compile", options.gene_name];
+  if (options.check) args.push("--check");
+  if (options.wasm_path) args.push("--wasm", options.wasm_path);
+  if (options.lang) args.push("--lang", options.lang);
+  return rotiferCmd(args, root);
 }
 
 export function runGene(options: {
   gene_name: string;
   project_root?: string;
   input?: string;
+  verbose?: boolean;
+  no_sandbox?: boolean;
+  trust_unsigned?: boolean;
 }): ShellResult {
   const root = resolveProjectRoot(options.project_root);
   const args = ["run", options.gene_name];
-  if (options.input) {
-    args.push("--input", options.input);
-  }
+  if (options.input) args.push("--input", options.input);
+  if (options.verbose) args.push("--verbose");
+  if (options.no_sandbox) args.push("--no-sandbox");
+  if (options.trust_unsigned) args.push("--trust-unsigned");
   return rotiferCmd(args, root);
 }
 
 // ── Creation-side operations ──
 
 export function initGene(options: {
-  name: string;
+  gene_name: string;
   project_root?: string;
   fidelity?: string;
+  domain?: string;
+  no_genesis?: boolean;
 }): ShellResult {
   const root = resolveProjectRoot(options.project_root);
-  const args = ["init", options.name];
-  if (options.fidelity) {
-    args.push("--fidelity", options.fidelity);
-  }
+  const args = ["init", options.gene_name];
+  if (options.fidelity) args.push("--fidelity", options.fidelity);
+  if (options.domain) args.push("--domain", options.domain);
+  if (options.no_genesis) args.push("--no-genesis");
   return rotiferCmd(args, root);
 }
 
 export function scanGenes(options: {
   path?: string;
   project_root?: string;
+  skills?: boolean;
+  skills_path?: string;
 }): ShellResult {
   const root = resolveProjectRoot(options.project_root);
   const args = ["scan"];
-  if (options.path) {
-    args.push(options.path);
-  }
+  if (options.path) args.push(options.path);
+  if (options.skills) args.push("--skills");
+  if (options.skills_path) args.push("--skills-path", options.skills_path);
   return rotiferCmd(args, root);
 }
 
 export function wrapGene(options: {
-  name: string;
+  gene_name: string;
   project_root?: string;
+  domain?: string;
+  fidelity?: string;
+  from_skill?: string;
+  from_clawhub?: string;
 }): ShellResult {
   const root = resolveProjectRoot(options.project_root);
-  return rotiferCmd(["wrap", options.name], root);
+  const args = ["wrap", options.gene_name];
+  if (options.domain) args.push("--domain", options.domain);
+  if (options.fidelity) args.push("--fidelity", options.fidelity);
+  if (options.from_skill) args.push("--from-skill", options.from_skill);
+  if (options.from_clawhub) args.push("--from-clawhub", options.from_clawhub);
+  return rotiferCmd(args, root);
 }
 
 export function testGene(options: {
-  name?: string;
+  gene_name: string;
   project_root?: string;
+  verbose?: boolean;
+  compliance?: boolean;
 }): ShellResult {
   const root = resolveProjectRoot(options.project_root);
-  const args = ["test"];
-  if (options.name) {
-    args.push(options.name);
-  }
+  const args = ["test", options.gene_name];
+  if (options.verbose) args.push("--verbose");
+  if (options.compliance) args.push("--compliance");
   return rotiferCmd(args, root);
 }
 
 export function publishGene(options: {
-  name?: string;
+  gene_name?: string;
   project_root?: string;
   all?: boolean;
   skip_arena?: boolean;
+  description?: string;
+  changelog?: string;
+  skip_security?: boolean;
 }): ShellResult {
   const root = resolveProjectRoot(options.project_root);
   const args = ["publish"];
   if (options.all) {
     args.push("--all");
-  } else if (options.name) {
-    args.push(options.name);
+  } else if (options.gene_name) {
+    args.push(options.gene_name);
   }
-  if (options.skip_arena) {
-    args.push("--skip-arena");
-  }
+  if (options.skip_arena) args.push("--skip-arena");
+  if (options.description) args.push("--description", options.description);
+  if (options.changelog) args.push("--changelog", options.changelog);
+  if (options.skip_security) args.push("--skip-security");
   return rotiferCmd(args, root);
+}
+
+export function vgScan(options: {
+  path?: string;
+  project_root?: string;
+  gene_id?: string;
+  all?: boolean;
+}): { grade: string; skill_id: string; findings: unknown[]; stats: { files_scanned: number; lines_of_code: number } } {
+  const root = resolveProjectRoot(options.project_root);
+  const scanPath = options.path || ".";
+  const args = ["vg", scanPath, "--json"];
+  if (options.gene_id) args.push("--id", options.gene_id);
+  if (options.all) args.push("--all");
+  const result = rotiferCmd(args, root);
+  if (!result.success) {
+    throw new Error(result.stderr || "V(g) scan failed");
+  }
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    throw new Error("Failed to parse V(g) scan output: " + result.stdout.slice(0, 200));
+  }
 }

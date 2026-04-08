@@ -27,7 +27,7 @@ Add to `.cursor/mcp.json`:
   "mcpServers": {
     "rotifer": {
       "command": "npx",
-      "args": ["-y", "@rotifer/mcp-server"]
+      "args": ["@rotifer/mcp-server"]
     }
   }
 }
@@ -42,7 +42,7 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "rotifer": {
       "command": "npx",
-      "args": ["-y", "@rotifer/mcp-server"]
+      "args": ["@rotifer/mcp-server"]
     }
   }
 }
@@ -63,25 +63,72 @@ You: "Compare genesis-web-search vs genesis-web-search-lite"
 AI:  → compare_genes({ gene_ids: ["...", "..."] })
      Side-by-side: success rate, latency, fitness breakdown
 
-You: "What genes are installed locally?"
-AI:  → list_local_genes()
-     Found 5 genes in ./genes/
+You: "Wrap my function as a gene with domain search.web"
+AI:  → wrap_gene({ gene_name: "my-search", domain: "search.web", fidelity: "Wrapped" })
+     Created genes/my-search/phenotype.json
+
+You: "Compile and publish it"
+AI:  → compile_gene({ gene_name: "my-search" })
+     → publish_gene({ gene_name: "my-search", changelog: "Initial release" })
 ```
 
-## Tools
+## Tools (29)
 
-| Tool | Description |
-|------|-------------|
-| `search_genes` | Search the Gene ecosystem by name, domain, or description |
-| `get_gene_detail` | Get detailed info about a specific Gene (phenotype, fitness, metadata) |
-| `get_arena_rankings` | Get Arena rankings for a domain, sorted by F(g) fitness score |
-| `compare_genes` | Side-by-side fitness comparison of 2–5 Genes |
-| `get_gene_stats` | Download statistics for a Gene (total, 7d, 30d, 90d) |
-| `get_leaderboard` | Developer reputation leaderboard |
-| `get_developer_profile` | Developer public profile and reputation data |
-| `list_local_genes` | Scan local workspace for installed Genes |
+### Discovery & Analytics
 
-## Resources
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `search_genes` | Search the Gene ecosystem by name, domain, or description | `query`, `domain`, `fidelity`, `sort` (`relevance`/`newest`/`popular`/`fitness`), `page`, `per_page` |
+| `get_gene_detail` | Get detailed info about a Gene (phenotype, fitness, metadata) | `gene_id`, `content_hash` (either identifies the gene) |
+| `get_arena_rankings` | Arena rankings for a domain, sorted by F(g) fitness | `domain`, `page`, `per_page` |
+| `compare_genes` | Side-by-side fitness comparison of 2–5 Genes | `gene_ids` (array) |
+| `get_gene_stats` | Download statistics (total, 7d, 30d, 90d) | `gene_id` |
+| `get_leaderboard` | Creator reputation leaderboard | `limit` |
+| `get_developer_profile` | Creator public profile and reputation | `username` |
+| `get_gene_reputation` | Detailed reputation breakdown (Arena, Usage, Stability) | `gene_id` |
+| `list_gene_versions` | Version history chain with changelogs | `owner`, `gene_name` |
+| `suggest_domain` | Suggest matching domains from the registry | `description` |
+
+### Local Workspace
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `list_local_genes` | Scan local workspace for installed Genes | `project_root`, `domain`, `fidelity` |
+| `list_local_agents` | List Agents in the local workspace | `project_root`, `state` |
+
+### Gene Lifecycle
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `init_gene` | Initialize a new Gene project with starter files | `gene_name`, `fidelity`, `domain`, `no_genesis` |
+| `scan_genes` | Scan for candidate functions or SKILL.md files | `path`, `skills`, `skills_path` |
+| `wrap_gene` | Wrap a function/skill as a Gene | `gene_name`, `domain`, `fidelity`, `from_skill`, `from_clawhub` |
+| `test_gene` | Test a Gene (schema validation + sandbox) | `gene_name`, `verbose`, `compliance` |
+| `compile_gene` | Compile a Gene to WASM IR | `gene_name`, `check`, `wasm_path`, `lang` |
+| `run_gene` | Execute a local Gene | `gene_name`, `input`, `verbose`, `no_sandbox`, `trust_unsigned` |
+| `publish_gene` | Publish to Rotifer Cloud | `gene_name`, `all`, `description`, `changelog`, `skip_arena`, `skip_security` |
+| `install_gene` | Install a Gene from Cloud Registry | `gene_id`, `project_root`, `force` |
+| `vg_scan` | V(g) security scan — static analysis for Gene/Skill code safety | `path`, `gene_id`, `all`, `project_root` |
+| `arena_submit` | Submit to Arena with 5D fitness scores | `gene_id`, `fitness_value`, `safety_score`, `success_rate`, `latency_score`, `resource_efficiency` |
+
+### Agent Composition
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `create_agent` | Create an Agent composing multiple Genes | `agent_name`, `gene_ids`, `composition` (`Seq`/`Par`/`Cond`/`Try`/`TryPool`), `domain`, `top`, `strategy`, `par_merge` |
+| `agent_run` | Run a local Agent by name | `agent_name`, `input`, `verbose`, `no_sandbox` |
+
+### Authentication & Analytics
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `auth_status` | Check login status | — |
+| `login` | OAuth login (GitHub/GitLab) | `provider`, `endpoint` |
+| `logout` | Clear credentials | — |
+| `get_mcp_stats` | MCP call analytics | `days` |
+| `get_my_reputation` | Current user's reputation | — |
+
+## Resources (7)
 
 MCP Resources let AI clients reference Rotifer data as context:
 
@@ -89,9 +136,11 @@ MCP Resources let AI clients reference Rotifer data as context:
 |---|---|
 | `rotifer://genes/{gene_id}/stats` | Gene download statistics |
 | `rotifer://genes/{gene_id}` | Gene detail + phenotype |
-| `rotifer://developers/{username}` | Developer profile + reputation |
-| `rotifer://leaderboard` | Top developers by reputation score |
+| `rotifer://developers/{username}` | Creator profile + reputation |
+| `rotifer://leaderboard` | Top creators by reputation score |
 | `rotifer://local/genes` | Local Gene inventory |
+| `rotifer://local/agents` | Local Agent registry |
+| `rotifer://version` | MCP Server version and update availability |
 
 ## Architecture
 
@@ -112,18 +161,19 @@ MCP Resources let AI clients reference Rotifer data as context:
 ┌─────────────────────────────────────────────────┐
 │  @rotifer/mcp-server                            │
 │                                                 │
-│  Tools      Resources      Local Scanner        │
-│  ┌──────┐   ┌──────────┐   ┌───────────────┐   │
-│  │search│   │gene://id │   │ ./genes/*.json │   │
-│  │arena │   │dev://user│   │ phenotype scan │   │
-│  │stats │   │leaderbd  │   └───────────────┘   │
-│  └──┬───┘   └────┬─────┘                       │
-└─────┼────────────┼──────────────────────────────┘
-      │            │
-      ▼            ▼
+│  29 Tools      7 Resources     Local Scanner    │
+│  ┌──────────┐  ┌───────────┐   ┌────────────┐  │
+│  │ discover │  │rotifer:// │   │ ./genes/    │  │
+│  │ lifecycle│  │genes/stats│   │ phenotype   │  │
+│  │ agents   │  │developers │   │ agents      │  │
+│  │ auth     │  │leaderboard│   └────────────┘  │
+│  └────┬─────┘  └─────┬─────┘         │         │
+└───────┼──────────────┼────────────────┼─────────┘
+        │              │                │
+        ▼              ▼                ▼
 ┌─────────────────────────────────────────────────┐
-│  Rotifer Cloud API (Supabase)                   │
-│  genes · arena_entries · developer_reputation   │
+│  Rotifer Cloud API          Local File System   │
+│  (Supabase)                 (genes/, .rotifer/) │
 └─────────────────────────────────────────────────┘
 ```
 

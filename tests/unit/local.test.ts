@@ -103,8 +103,8 @@ describe("listLocalGenes", () => {
     });
 
     const result = listLocalGenes({ project_root: "/project" });
-    expect(result.genes[0].compiled?.ir_hash).toBe("abc123");
-    expect(result.genes[0].has_wasm).toBe(true);
+    expect(result.genes[0].compiled?.irHash).toBe("abc123");
+    expect(result.genes[0].hasWasm).toBe(true);
   });
 
   it("filters by domain prefix", () => {
@@ -167,7 +167,7 @@ describe("listLocalGenes", () => {
     vi.mocked(statSync).mockReturnValue({ isDirectory: () => true } as any);
 
     const result = listLocalGenes({ project_root: "/project" });
-    expect(result.genes_dir).toContain("custom-genes");
+    expect(result.genesDir).toContain("custom-genes");
     expect(result.total).toBe(1);
   });
 

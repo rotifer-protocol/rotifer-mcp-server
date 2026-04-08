@@ -89,7 +89,7 @@ async function testCloudTools() {
 
   await test("search_genes: pagination", async () => {
     const r = await searchGenes({ perPage: 3, page: 1 });
-    assert(r.per_page === 3, "per_page should be 3");
+    assert(r.perPage === 3, "perPage should be 3");
     assert(r.genes.length <= 3, "Should return at most 3 genes");
   });
 
@@ -101,13 +101,13 @@ async function testCloudTools() {
 
   await test("search_genes: perPage capped at 50", async () => {
     const r = await searchGenes({ perPage: 999 });
-    assert(r.per_page === 50, `per_page should be capped at 50, got ${r.per_page}`);
+    assert(r.perPage === 50, `perPage should be capped at 50, got ${r.perPage}`);
   });
 
   // --- get_gene_detail ---
   await test("get_gene_detail: valid gene", async () => {
     assert(firstGeneId !== "", "Need a gene ID from search_genes");
-    const g = await getGeneDetail({ id: firstGeneId });
+    const g = await getGeneDetail({ gene_id: firstGeneId });
     assert(g.id === firstGeneId, "ID should match");
     assert(typeof g.name === "string" && g.name.length > 0, "Name should be non-empty");
     assert(typeof g.domain === "string", "Domain should exist");
@@ -116,14 +116,14 @@ async function testCloudTools() {
 
   await test("get_gene_detail: invalid gene id → error", async () => {
     await expectError(
-      () => getGeneDetail({ id: "00000000-0000-0000-0000-000000000000" }),
+      () => getGeneDetail({ gene_id: "00000000-0000-0000-0000-000000000000" }),
       "not found"
     );
   });
 
   await test("get_gene_detail: missing id → error", async () => {
     await expectError(
-      () => getGeneDetail({ id: "" }),
+      () => getGeneDetail({ gene_id: "" }),
       "required"
     );
   });
@@ -148,8 +148,8 @@ async function testCloudTools() {
     if (r.rankings.length > 0) {
       const e = r.rankings[0];
       assert(typeof e.rank === "number", "rank should be number");
-      assert(typeof e.gene_id === "string", "gene_id should be string");
-      assert(typeof e.gene_name === "string", "gene_name should be string");
+      assert(typeof e.geneId === "string", "geneId should be string");
+      assert(typeof e.geneName === "string", "geneName should be string");
       assert(typeof e.fitness === "number", "fitness should be number");
       assert(typeof e.safety === "number", "safety should be number");
     }
@@ -159,13 +159,13 @@ async function testCloudTools() {
   await test("get_gene_stats: valid gene", async () => {
     assert(firstGeneId !== "", "Need a gene ID");
     const r = await geneStats({ gene_id: firstGeneId });
-    assert(r.gene_id === firstGeneId, "gene_id should match");
+    assert(r.geneId === firstGeneId, "geneId should match");
     assert(typeof r.total === "number", "total should be number");
-    assert(typeof r.last_7d === "number", "last_7d should be number");
-    assert(typeof r.last_30d === "number", "last_30d should be number");
-    assert(typeof r.last_90d === "number", "last_90d should be number");
-    assert(r.last_7d <= r.last_30d, "7d should be <= 30d");
-    assert(r.last_30d <= r.last_90d, "30d should be <= 90d");
+    assert(typeof r.last7d === "number", "last7d should be number");
+    assert(typeof r.last30d === "number", "last30d should be number");
+    assert(typeof r.last90d === "number", "last90d should be number");
+    assert(r.last7d <= r.last30d, "7d should be <= 30d");
+    assert(r.last30d <= r.last90d, "30d should be <= 90d");
   });
 
   await test("get_gene_stats: invalid gene → error", async () => {
@@ -191,10 +191,10 @@ async function testCloudTools() {
     const r = await leaderboard({ limit: 3 });
     if (r.developers.length > 0) {
       const d = r.developers[0];
-      assert(typeof d.user_id === "string", "user_id should be string");
+      assert(typeof d.userId === "string", "userId should be string");
       assert(typeof d.username === "string", "username should be string");
       assert(typeof d.score === "number", "score should be number");
-      assert(typeof d.genes_published === "number", "genes_published should be number");
+      assert(typeof d.genesPublished === "number", "genesPublished should be number");
     } else {
       console.log("    ⚠ leaderboard is empty (developer_reputation not computed yet)");
     }
@@ -207,15 +207,15 @@ async function testCloudTools() {
     const search = await searchGenes({ perPage: 1 });
     assert(search.genes.length > 0, "Need at least one published gene to find an owner");
     testUsername = search.genes[0].owner;
-    assert(testUsername.length > 0 && testUsername !== "unknown", "Owner username should be non-empty");
+    assert(testUsername.length > 0 && testUsername !== "unknown", "Creator username should be non-empty");
   });
 
   await test("get_developer_profile: valid username", async () => {
     assert(testUsername !== "", "Need a username");
     const p = await developerProfile({ username: testUsername });
     assert(p.username === testUsername, "Username should match");
-    assert(typeof p.user_id === "string", "user_id should be string");
-    assert(typeof p.created_at === "string", "created_at should be string");
+    assert(typeof p.userId === "string", "userId should be string");
+    assert(typeof p.createdAt === "string", "createdAt should be string");
   });
 
   await test("get_developer_profile: invalid username → error", async () => {
@@ -261,7 +261,7 @@ async function testLocalTools() {
     const r = listLocalGenes({ project_root: PLAYGROUND_ROOT });
     assert(r.total > 0, `Should find genes, got ${r.total}`);
     assert(r.genes.length === r.total, "genes.length should match total");
-    assert(r.genes_dir.includes("genes"), "genes_dir should include 'genes'");
+    assert(r.genesDir.includes("genes"), "genesDir should include 'genes'");
   });
 
   await test("list_local_genes: every gene has required fields", async () => {
@@ -270,8 +270,8 @@ async function testLocalTools() {
       assert(typeof g.name === "string" && g.name.length > 0, `Gene name empty`);
       assert(typeof g.domain === "string" && g.domain.length > 0, `Gene "${g.name}" domain empty`);
       assert(typeof g.fidelity === "string", `Gene "${g.name}" fidelity missing`);
-      assert(typeof g.has_wasm === "boolean", `Gene "${g.name}" has_wasm should be boolean`);
-      assert(typeof g.has_source === "boolean", `Gene "${g.name}" has_source should be boolean`);
+      assert(typeof g.hasWasm === "boolean", `Gene "${g.name}" hasWasm should be boolean`);
+      assert(typeof g.hasSource === "boolean", `Gene "${g.name}" hasSource should be boolean`);
     }
   });
 
@@ -333,7 +333,7 @@ async function testResources() {
     assert(geneId, "Need a gene ID");
     const stats = await getGeneStatsRpc(geneId);
     assert(typeof stats.total === "number", "total should be number");
-    assert(typeof stats.last_7d === "number", "last_7d should be number");
+    assert(typeof stats.last7d === "number", "last7d should be number");
   });
 
   await test("resource rotifer://genes/{id}", async () => {
@@ -384,7 +384,7 @@ async function testEdgeCases() {
 
   await test("get_gene_detail: malformed UUID → error", async () => {
     await expectError(
-      () => getGeneDetail({ id: "not-a-uuid" }),
+      () => getGeneDetail({ gene_id: "not-a-uuid" }),
     );
   });
 

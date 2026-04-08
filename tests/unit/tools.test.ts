@@ -18,7 +18,7 @@ vi.mock("../../src/auth.js", () => ({
   clearCredentials: vi.fn(),
   generateCodeVerifier: vi.fn().mockReturnValue("test-verifier"),
   generateCodeChallenge: vi.fn().mockReturnValue("test-challenge"),
-  waitForOAuthCallback: vi.fn(),
+  startOAuthCallbackServer: vi.fn(),
 }));
 
 vi.mock("../../src/open-browser.js", () => ({
@@ -59,7 +59,7 @@ beforeEach(() => {
 
 describe("searchGenes", () => {
   it("caps perPage at 50", async () => {
-    vi.mocked(listGenes).mockResolvedValueOnce({ genes: [], total: 0, page: 1, per_page: 50 });
+    vi.mocked(listGenes).mockResolvedValueOnce({ genes: [], total: 0, page: 1, perPage: 50 });
     await searchGenes({ perPage: 999 });
     expect(vi.mocked(listGenes)).toHaveBeenCalledWith(
       expect.objectContaining({ perPage: 50 })
@@ -67,7 +67,7 @@ describe("searchGenes", () => {
   });
 
   it("defaults page to 1", async () => {
-    vi.mocked(listGenes).mockResolvedValueOnce({ genes: [], total: 0, page: 1, per_page: 20 });
+    vi.mocked(listGenes).mockResolvedValueOnce({ genes: [], total: 0, page: 1, perPage: 20 });
     await searchGenes({});
     expect(vi.mocked(listGenes)).toHaveBeenCalledWith(
       expect.objectContaining({ page: 1 })
@@ -75,7 +75,7 @@ describe("searchGenes", () => {
   });
 
   it("passes through all filter options", async () => {
-    vi.mocked(listGenes).mockResolvedValueOnce({ genes: [], total: 0, page: 1, per_page: 5 });
+    vi.mocked(listGenes).mockResolvedValueOnce({ genes: [], total: 0, page: 1, perPage: 5 });
     await searchGenes({ query: "test", domain: "code", fidelity: "Native", page: 2, perPage: 5 });
     expect(vi.mocked(listGenes)).toHaveBeenCalledWith({
       query: "test", domain: "code", fidelity: "Native", page: 2, perPage: 5,
@@ -85,13 +85,13 @@ describe("searchGenes", () => {
 
 describe("getGeneDetail", () => {
   it("throws on empty id", async () => {
-    await expect(getGeneDetail({ id: "" })).rejects.toThrow("required");
+    await expect(getGeneDetail({ gene_id: "" })).rejects.toThrow("required");
   });
 
   it("delegates to getGene", async () => {
     const fakeGene = { id: "abc", name: "test", phenotype: {} } as any;
     vi.mocked(getGene).mockResolvedValueOnce(fakeGene);
-    const result = await getGeneDetail({ id: "abc" });
+    const result = await getGeneDetail({ gene_id: "abc" });
     expect(result).toBe(fakeGene);
   });
 });
@@ -101,10 +101,10 @@ describe("geneStats", () => {
     await expect(geneStats({ gene_id: "" })).rejects.toThrow("required");
   });
 
-  it("attaches gene_id to result", async () => {
-    vi.mocked(getGeneStatsRpc).mockResolvedValueOnce({ total: 10, last_7d: 1, last_30d: 5, last_90d: 8 });
+  it("attaches geneId to result", async () => {
+    vi.mocked(getGeneStatsRpc).mockResolvedValueOnce({ total: 10, last7d: 1, last30d: 5, last90d: 8 });
     const result = await geneStats({ gene_id: "xyz" });
-    expect(result.gene_id).toBe("xyz");
+    expect(result.geneId).toBe("xyz");
     expect(result.total).toBe(10);
   });
 });
@@ -117,7 +117,7 @@ describe("leaderboard", () => {
   });
 
   it("count matches array length", async () => {
-    const devs = [{ user_id: "a" }, { user_id: "b" }] as any[];
+    const devs = [{ userId: "a" }, { userId: "b" }] as any[];
     vi.mocked(getReputationLeaderboard).mockResolvedValueOnce(devs);
     const result = await leaderboard({ limit: 5 });
     expect(result.count).toBe(2);
@@ -131,7 +131,7 @@ describe("developerProfile", () => {
   });
 
   it("delegates to getDeveloperProfile", async () => {
-    const fakeProfile = { user_id: "u1", username: "dev" } as any;
+    const fakeProfile = { userId: "u1", username: "dev" } as any;
     vi.mocked(getDeveloperProfile).mockResolvedValueOnce(fakeProfile);
     const result = await developerProfile({ username: "dev" });
     expect(result).toBe(fakeProfile);
@@ -177,10 +177,10 @@ describe("compareGenes", () => {
     await expect(compareGenes({ gene_ids: [] })).rejects.toThrow("At least 2");
   });
 
-  it("sorts by reputation_score and generates recommendation", async () => {
+  it("sorts by reputationScore and generates recommendation", async () => {
     vi.mocked(getGene)
-      .mockResolvedValueOnce({ id: "a", name: "Low", domain: "d", fidelity: "Wrapped", reputation_score: 3, downloads: 1 } as any)
-      .mockResolvedValueOnce({ id: "b", name: "High", domain: "d", fidelity: "Native", reputation_score: 9, downloads: 5 } as any);
+      .mockResolvedValueOnce({ id: "a", name: "Low", domain: "d", fidelity: "Wrapped", reputationScore: 3, downloads: 1 } as any)
+      .mockResolvedValueOnce({ id: "b", name: "High", domain: "d", fidelity: "Native", reputationScore: 9, downloads: 5 } as any);
 
     const result = await compareGenes({ gene_ids: ["a", "b"] });
     expect(result.comparison.length).toBe(2);
@@ -190,7 +190,7 @@ describe("compareGenes", () => {
 
   it("rejects when one getGene call fails", async () => {
     vi.mocked(getGene)
-      .mockResolvedValueOnce({ id: "a", name: "OK", domain: "d", fidelity: "Wrapped", reputation_score: 5, downloads: 1 } as any)
+      .mockResolvedValueOnce({ id: "a", name: "OK", domain: "d", fidelity: "Wrapped", reputationScore: 5, downloads: 1 } as any)
       .mockRejectedValueOnce(new Error("Gene 'b' not found"));
 
     await expect(compareGenes({ gene_ids: ["a", "b"] })).rejects.toThrow("not found");
@@ -198,8 +198,8 @@ describe("compareGenes", () => {
 
   it("handles null reputation scores", async () => {
     vi.mocked(getGene)
-      .mockResolvedValueOnce({ id: "a", name: "A", domain: "d", fidelity: "Wrapped", reputation_score: null, downloads: 0 } as any)
-      .mockResolvedValueOnce({ id: "b", name: "B", domain: "d", fidelity: "Wrapped", reputation_score: null, downloads: 0 } as any);
+      .mockResolvedValueOnce({ id: "a", name: "A", domain: "d", fidelity: "Wrapped", reputationScore: null, downloads: 0 } as any)
+      .mockResolvedValueOnce({ id: "b", name: "B", domain: "d", fidelity: "Wrapped", reputationScore: null, downloads: 0 } as any);
 
     const result = await compareGenes({ gene_ids: ["a", "b"] });
     expect(result.recommendation).toContain("N/A");
@@ -216,14 +216,14 @@ describe("submitToArena", () => {
 
   it("delegates to arenaSubmitCloud with correct mapping", async () => {
     vi.mocked(arenaSubmitCloud).mockResolvedValueOnce({
-      gene_id: "g1", domain: "d", fitness_value: 0.9, safety_score: 0.8,
-      success_rate: 0.95, latency_score: 0.7, resource_efficiency: 0.85,
+      geneId: "g1", domain: "d", fitnessValue: 0.9, safetyScore: 0.8,
+      successRate: 0.95, latencyScore: 0.7, resourceEfficiency: 0.85,
     });
     const result = await submitToArena({
       gene_id: "g1", fitness_value: 0.9, safety_score: 0.8,
       success_rate: 0.95, latency_score: 0.7, resource_efficiency: 0.85,
     });
-    expect(result.gene_id).toBe("g1");
+    expect(result.geneId).toBe("g1");
     expect(vi.mocked(arenaSubmitCloud)).toHaveBeenCalledWith("g1", {
       value: 0.9, safety_score: 0.8, success_rate: 0.95,
       latency_score: 0.7, resource_efficiency: 0.85,
@@ -238,7 +238,7 @@ describe("installGeneFromCloud", () => {
 
   it("delegates to installGene", async () => {
     vi.mocked(installGene).mockResolvedValueOnce({
-      gene_id: "g1", name: "test", domain: "d", fidelity: "Native", installed_to: "/path",
+      geneId: "g1", name: "test", domain: "d", fidelity: "Native", installedTo: "/path",
     });
     const result = await installGeneFromCloud({ gene_id: "g1" });
     expect(result.name).toBe("test");
@@ -246,16 +246,16 @@ describe("installGeneFromCloud", () => {
 });
 
 describe("authStatus", () => {
-  it("returns logged_in=false when no credentials", () => {
+  it("returns isLoggedIn=false when no credentials", () => {
     vi.mocked(loadCredentials).mockReturnValueOnce(null);
     const result = authStatus();
-    expect(result.logged_in).toBe(false);
+    expect(result.isLoggedIn).toBe(false);
     expect(result.username).toBeNull();
     expect(result.provider).toBeNull();
-    expect(result.expires_in_minutes).toBeNull();
+    expect(result.expiresInMinutes).toBeNull();
   });
 
-  it("returns logged_in=true with user info when credentials exist", () => {
+  it("returns isLoggedIn=true with user info when credentials exist", () => {
     vi.mocked(loadCredentials).mockReturnValueOnce({
       access_token: "tok", refresh_token: "ref",
       expires_at: Date.now() + 3600_000,
@@ -263,10 +263,10 @@ describe("authStatus", () => {
       user: { id: "u1", username: "dev", avatar_url: null, provider_id: "p1" },
     });
     const result = authStatus();
-    expect(result.logged_in).toBe(true);
+    expect(result.isLoggedIn).toBe(true);
     expect(result.username).toBe("dev");
     expect(result.provider).toBe("gitlab");
-    expect(result.expires_in_minutes).toBeGreaterThan(0);
+    expect(result.expiresInMinutes).toBeGreaterThan(0);
   });
 });
 
