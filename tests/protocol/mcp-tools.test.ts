@@ -3,6 +3,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../../src/server.js";
 
+const hasCloudKey = !!process.env.ROTIFER_CLOUD_ANON_KEY;
+const describeCloud = hasCloudKey ? describe : describe.skip;
+
 let client: Client;
 let cleanup: () => Promise<void>;
 
@@ -70,7 +73,7 @@ describe("listTools", { timeout: 10000 }, () => {
   });
 });
 
-describe("callTool", { timeout: 15000 }, () => {
+describeCloud("callTool", { timeout: 15000 }, () => {
   it("search_genes returns valid JSON", async () => {
     const result = await client.callTool({ name: "search_genes", arguments: { per_page: 2 } });
     expect(result.isError).toBeFalsy();
