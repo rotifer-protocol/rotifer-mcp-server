@@ -64,7 +64,7 @@ jobs:
 
             ### Install
             ```bash
-            npm install -g @anthropic-ai/rotifer-mcp-server@${{ steps.version.outputs.version }}
+            npm install -g @rotifer/mcp-server@${{ steps.version.outputs.version }}
             ```
           draft: false
           prerelease: ${{ contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'beta') }}
