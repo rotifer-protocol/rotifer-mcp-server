@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { searchGenes, getGeneDetail, compareGenes, geneStats, developerProfile, listLocalGenes, submitToArena, installGeneFromCloud, authStatus } from "../../src/tools.js";
 
-describe("oversized input", { timeout: 15000 }, () => {
+const hasCloudKey = !!process.env.ROTIFER_CLOUD_ANON_KEY;
+const describeCloud = hasCloudKey ? describe : describe.skip;
+
+describeCloud("oversized input", { timeout: 15000 }, () => {
   it("handles 10000-char query without crashing", async () => {
     const longQuery = "a".repeat(10000);
     try {
@@ -21,7 +24,7 @@ describe("oversized input", { timeout: 15000 }, () => {
   });
 });
 
-describe("null bytes", { timeout: 15000 }, () => {
+describeCloud("null bytes", { timeout: 15000 }, () => {
   it("handles null byte in query (reject or return empty)", async () => {
     try {
       const result = await searchGenes({ query: "test\x00injected" });
@@ -40,7 +43,7 @@ describe("null bytes", { timeout: 15000 }, () => {
   });
 });
 
-describe("unicode edge cases", { timeout: 15000 }, () => {
+describeCloud("unicode edge cases", { timeout: 15000 }, () => {
   it("handles emoji in query", async () => {
     const result = await searchGenes({ query: "🧬gene" });
     expect(Array.isArray(result.genes)).toBe(true);
@@ -57,7 +60,7 @@ describe("unicode edge cases", { timeout: 15000 }, () => {
   });
 });
 
-describe("extreme pagination", { timeout: 15000 }, () => {
+describeCloud("extreme pagination", { timeout: 15000 }, () => {
   it("handles very large page number", async () => {
     try {
       const result = await searchGenes({ page: 999999 });
@@ -82,7 +85,7 @@ describe("extreme pagination", { timeout: 15000 }, () => {
   });
 });
 
-describe("array abuse", { timeout: 15000 }, () => {
+describeCloud("array abuse", { timeout: 15000 }, () => {
   it("handles 5 identical gene IDs", async () => {
     const search = await searchGenes({ perPage: 1 });
     if (search.genes.length === 0) return;
@@ -92,7 +95,7 @@ describe("array abuse", { timeout: 15000 }, () => {
   });
 });
 
-describe("empty strings", { timeout: 15000 }, () => {
+describeCloud("empty strings", { timeout: 15000 }, () => {
   it("gene_id='' throws", async () => {
     await expect(geneStats({ gene_id: "" })).rejects.toThrow("required");
   });
@@ -118,7 +121,7 @@ describe("local filesystem abuse", () => {
   });
 });
 
-describe("write operation input abuse", { timeout: 15000 }, () => {
+describeCloud("write operation input abuse", { timeout: 15000 }, () => {
   it("submitToArena rejects empty gene_id", async () => {
     await expect(submitToArena({
       gene_id: "", fitness_value: 0.5, safety_score: 0.5,
