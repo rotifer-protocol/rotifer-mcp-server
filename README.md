@@ -7,10 +7,10 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-indigo)](https://modelcontextprotocol.io)
 
-**Search, inspect, compare, and rank AI Genes — directly from your IDE.**
+**Build, compose, and run AI agents — directly from your IDE.**
 
-MCP server for the [Rotifer Protocol](https://rotifer.dev) Gene ecosystem.
-Works with Cursor, Claude Desktop, Windsurf, and any MCP-compatible client.
+Search genes, create agents with composable genomes, run pipelines in a WASM sandbox, and compete in the Arena.
+Zero config. Works with Cursor, Claude Desktop, Windsurf, and any MCP-compatible client.
 
 </div>
 
@@ -54,21 +54,38 @@ Use the same `npx` command — any client that supports MCP stdio transport will
 
 ## What Can It Do?
 
+### Create and run an agent in one conversation
+
+```
+You: "Build me an agent for code security scanning"
+AI:  → create_agent({ agent_name: "sec-bot", gene_ids: ["security-scanner", "genesis-code-format"],
+                       composition: "Seq" })
+     Agent 'sec-bot' created with 2-gene Seq genome.
+
+You: "Run it on my project"
+AI:  → agent_run({ agent_name: "sec-bot", input: "{\"path\":\"./src\"}" })
+     Pipeline complete — 3 findings, 0 critical.
+```
+
+### Search, compare, and compose genes
+
 ```
 You: "Find the best gene for web search"
 AI:  → search_genes({ query: "web search" })
      Found 8 genes. Top match: genesis-web-search (F(g) = 0.87, Native)
 
-You: "Compare genesis-web-search vs genesis-web-search-lite"
+You: "Compare it against the lite version"
 AI:  → compare_genes({ gene_ids: ["...", "..."] })
      Side-by-side: success rate, latency, fitness breakdown
+```
 
-You: "Wrap my function as a gene with domain search.web"
+### Full gene lifecycle from your IDE
+
+```
+You: "Wrap my function as a gene"
 AI:  → wrap_gene({ gene_name: "my-search", domain: "search.web", fidelity: "Wrapped" })
-     Created genes/my-search/phenotype.json
-
-You: "Compile and publish it"
-AI:  → compile_gene({ gene_name: "my-search" })
+     → compile_gene({ gene_name: "my-search" })
+     → test_gene({ gene_name: "my-search", compliance: true })
      → publish_gene({ gene_name: "my-search", changelog: "Initial release" })
 ```
 
@@ -142,6 +159,21 @@ MCP Resources let AI clients reference Rotifer data as context:
 | `rotifer://local/agents` | Local Agent registry |
 | `rotifer://version` | MCP Server version and update availability |
 
+## Prompts (4)
+
+MCP Prompts give AI clients guided workflows for common tasks:
+
+| Prompt | Description | Key Arguments |
+|--------|-------------|---------------|
+| `rotifer-hello` | Interactive agent creation — pick a template and run immediately | `template`, `input` |
+| `rotifer-guide` | Understand Rotifer Protocol — genes, agents, Arena, fidelity model | — |
+| `rotifer-architect` | Design an Agent — task-driven gene search + composition planning | `task` |
+| `rotifer-challenge` | Arena evaluation — submit a gene, compare with competitors | `gene` |
+
+Try asking your AI: *"Use the rotifer-hello prompt to build me an agent"* or *"Use rotifer-architect to design an agent for document Q&A"*.
+
+---
+
 ## Architecture
 
 ```
@@ -161,7 +193,7 @@ MCP Resources let AI clients reference Rotifer data as context:
 ┌─────────────────────────────────────────────────┐
 │  @rotifer/mcp-server                            │
 │                                                 │
-│  29 Tools      7 Resources     Local Scanner    │
+│  29 Tools  7 Resources  4 Prompts  Local Scanner│
 │  ┌──────────┐  ┌───────────┐   ┌────────────┐  │
 │  │ discover │  │rotifer:// │   │ ./genes/    │  │
 │  │ lifecycle│  │genes/stats│   │ phenotype   │  │
@@ -201,13 +233,23 @@ ROTIFER_CLOUD_ANON_KEY=your-anon-key
 
 - Node.js >= 20
 
+## Pair with the CLI
+
+This MCP server works best alongside the [Rotifer CLI](https://github.com/rotifer-protocol/rotifer-playground). The CLI provides the local runtime (WASM sandbox, Arena engine, IR compiler) while the MCP server exposes it all to your AI assistant:
+
+```bash
+npm install -g @rotifer/playground
+rotifer init my-project && cd my-project
+rotifer hello   # your first agent in 30 seconds
+```
+
 ## Links
 
 - [Rotifer Protocol](https://rotifer.dev) — Main site
 - [MCP Setup Guide](https://rotifer.dev/docs/guides/mcp-setup) — Step-by-step setup
 - [Gene Marketplace](https://rotifer.ai) — Browse and discover Genes
+- [CLI Playground](https://github.com/rotifer-protocol/rotifer-playground) — Build and test Genes locally
 - [Protocol Specification](https://github.com/rotifer-protocol/rotifer-spec) — Formal spec
-- [CLI Playground](https://github.com/rotifer-protocol/rotifer-playground) — Build and test Genes
 
 ## License
 
