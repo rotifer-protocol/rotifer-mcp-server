@@ -37,10 +37,28 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Check whether version already exists on npm
+        id: npm_check
+        run: |
+          if npm view "@rotifer/mcp-server@${{ steps.version.outputs.version }}" version >/dev/null 2>&1; then
+            echo "already_published=true" >> $GITHUB_OUTPUT
+          else
+            echo "already_published=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Publish
+        if: steps.npm_check.outputs.already_published != 'true'
         run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Skip publish when version already exists
+        if: steps.npm_check.outputs.already_published == 'true'
+        run: echo "Package version already exists on npm; skipping publish."
 
   github-release:
     name: GitHub Release
