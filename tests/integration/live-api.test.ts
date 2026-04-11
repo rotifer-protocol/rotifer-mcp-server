@@ -9,14 +9,11 @@ import {
   developerProfile,
   listLocalGenes,
 } from "../../src/tools.js";
-
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { PLAYGROUND_ROOT } from "../support/external-deps.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PLAYGROUND_ROOT = resolve(__dirname, "../../../rotifer-playground");
-const hasPlayground = existsSync(resolve(PLAYGROUND_ROOT, "genes"));
+const hasPlayground = PLAYGROUND_ROOT !== null && existsSync(join(PLAYGROUND_ROOT, "genes"));
 
 const hasCloudKey = !!process.env.ROTIFER_CLOUD_ANON_KEY;
 const describeCloud = hasCloudKey ? describe : describe.skip;
@@ -192,13 +189,13 @@ describeCloud("compare_genes", { timeout: 15000 }, () => {
 
 describe.skipIf(!hasPlayground)("list_local_genes", () => {
   it("scans playground genes", () => {
-    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT });
+    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT! });
     expect(r.total).toBeGreaterThan(0);
     expect(r.genes.length).toBe(r.total);
   });
 
   it("every gene has required fields", () => {
-    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT });
+    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT! });
     for (const g of r.genes) {
       expect(g.name).toBeTruthy();
       expect(g.domain).toBeTruthy();
@@ -209,7 +206,7 @@ describe.skipIf(!hasPlayground)("list_local_genes", () => {
   });
 
   it("filters by domain", () => {
-    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT, domain: "code" });
+    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT!, domain: "code" });
     expect(r.total).toBeGreaterThan(0);
     for (const g of r.genes) {
       expect(g.domain === "code" || g.domain.startsWith("code.")).toBe(true);
@@ -217,14 +214,14 @@ describe.skipIf(!hasPlayground)("list_local_genes", () => {
   });
 
   it("filters by fidelity", () => {
-    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT, fidelity: "Native" });
+    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT!, fidelity: "Native" });
     for (const g of r.genes) {
       expect(g.fidelity).toBe("Native");
     }
   });
 
   it("results are sorted", () => {
-    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT });
+    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT! });
     for (let i = 1; i < r.genes.length; i++) {
       const prev = r.genes[i - 1];
       const curr = r.genes[i];
@@ -239,8 +236,8 @@ describe.skipIf(!hasPlayground)("list_local_genes", () => {
   });
 
   it("handles combined filters", () => {
-    const all = listLocalGenes({ project_root: PLAYGROUND_ROOT });
-    const filtered = listLocalGenes({ project_root: PLAYGROUND_ROOT, domain: "content", fidelity: "Wrapped" });
+    const all = listLocalGenes({ project_root: PLAYGROUND_ROOT! });
+    const filtered = listLocalGenes({ project_root: PLAYGROUND_ROOT!, domain: "content", fidelity: "Wrapped" });
     expect(filtered.total).toBeLessThanOrEqual(all.total);
     for (const g of filtered.genes) {
       expect(g.domain.startsWith("content")).toBe(true);
