@@ -37,7 +37,10 @@ jobs:
       - run: npm ci
       - run: npm audit --audit-level=high
       - run: npm run build
-      - run: npm test
+      - run: npm run test:coverage
+      - name: Run live cloud integration tests
+        if: github.event_name != 'pull_request'
+        run: npm run test:live
 
   gitleaks:
     name: Secrets Scan
@@ -148,10 +151,10 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      - name: Run tests with JSON reporter + coverage
-        run: npx vitest run --reporter=json --outputFile=test-results.json --coverage 2>/dev/null || true
+      - name: Run core tests with JSON reporter + coverage
+        run: npm run test:coverage -- --reporter=json --outputFile=test-results.json 2>/dev/null || true
 
-      - name: Report test results to Supabase
+      - name: Report core test results to Supabase
         if: env.QUALITY_SUPABASE_URL != ''
         env:
           QUALITY_SUPABASE_URL: ${{ secrets.QUALITY_SUPABASE_URL }}
@@ -170,6 +173,7 @@ jobs:
           TOTAL=$(node -p "JSON.parse(require('fs').readFileSync('test-results.json','utf8')).numTotalTests || 0")
           PASSED=$(node -p "JSON.parse(require('fs').readFileSync('test-results.json','utf8')).numPassedTests || 0")
           FAILED=$(node -p "JSON.parse(require('fs').readFileSync('test-results.json','utf8')).numFailedTests || 0")
+          SKIPPED=$(node -p "const r=JSON.parse(require('fs').readFileSync('test-results.json','utf8')); (r.numPendingTests || 0) + (r.numTodoTests || 0)")
           DURATION=$(node -p "Math.round(JSON.parse(require('fs').readFileSync('test-results.json','utf8')).testResults?.reduce((s,r) => s + (r.endTime - r.startTime), 0) || 0)")
           COVERAGE_PCT=0
           if [ -f coverage/coverage-summary.json ]; then
@@ -180,8 +184,43 @@ jobs:
             -H "Authorization: Bearer ${QUALITY_SUPABASE_KEY}" \
             -H "Content-Type: application/json" \
             -H "Prefer: return=minimal" \
-            -d "{\"version\":\"${COMPONENT_VERSION}\",\"release_line_version\":\"${RELEASE_LINE_VERSION}\",\"component\":\"mcp\",\"test_type\":\"unit\",\"total_tests\":${TOTAL},\"passed\":${PASSED},\"failed\":${FAILED},\"duration_ms\":${DURATION},\"coverage_pct\":${COVERAGE_PCT},\"ci_run_url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}"; then
+            -d "{\"version\":\"${COMPONENT_VERSION}\",\"release_line_version\":\"${RELEASE_LINE_VERSION}\",\"component\":\"mcp\",\"test_type\":\"unit\",\"total_tests\":${TOTAL},\"passed\":${PASSED},\"failed\":${FAILED},\"skipped\":${SKIPPED},\"duration_ms\":${DURATION},\"coverage_pct\":${COVERAGE_PCT},\"ci_run_url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}"; then
             echo "✅ Reported (coverage: ${COVERAGE_PCT}%)"
           else
             echo "::warning::Quality test report upload failed"
+          fi
+
+      - name: Run live integration tests with JSON reporter
+        run: npm run test:live -- --reporter=json --outputFile=live-results.json 2>/dev/null || true
+
+      - name: Report live integration results to Supabase
+        if: env.QUALITY_SUPABASE_URL != ''
+        env:
+          QUALITY_SUPABASE_URL: ${{ secrets.QUALITY_SUPABASE_URL }}
+          QUALITY_SUPABASE_KEY: ${{ secrets.QUALITY_SUPABASE_SERVICE_KEY }}
+        run: |
+          normalize_version() {
+            case "$1" in
+              v*) printf '%s' "$1" ;;
+              *) printf 'v%s' "$1" ;;
+            esac
+          }
+          if [ ! -f live-results.json ]; then exit 0; fi
+          VERSION=$(node -p "require('./package.json').version")
+          COMPONENT_VERSION=$(normalize_version "${VERSION}")
+          RELEASE_LINE_VERSION="${COMPONENT_VERSION}"
+          TOTAL=$(node -p "JSON.parse(require('fs').readFileSync('live-results.json','utf8')).numTotalTests || 0")
+          PASSED=$(node -p "JSON.parse(require('fs').readFileSync('live-results.json','utf8')).numPassedTests || 0")
+          FAILED=$(node -p "JSON.parse(require('fs').readFileSync('live-results.json','utf8')).numFailedTests || 0")
+          SKIPPED=$(node -p "const r=JSON.parse(require('fs').readFileSync('live-results.json','utf8')); (r.numPendingTests || 0) + (r.numTodoTests || 0)")
+          DURATION=$(node -p "Math.round(JSON.parse(require('fs').readFileSync('live-results.json','utf8')).testResults?.reduce((s,r) => s + (r.endTime - r.startTime), 0) || 0)")
+          if curl --fail-with-body -sS -X POST "${QUALITY_SUPABASE_URL}/rest/v1/release_test_reports" \
+            -H "apikey: ${QUALITY_SUPABASE_KEY}" \
+            -H "Authorization: Bearer ${QUALITY_SUPABASE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d "{\"version\":\"${COMPONENT_VERSION}\",\"release_line_version\":\"${RELEASE_LINE_VERSION}\",\"component\":\"mcp\",\"test_type\":\"integration\",\"total_tests\":${TOTAL},\"passed\":${PASSED},\"failed\":${FAILED},\"skipped\":${SKIPPED},\"duration_ms\":${DURATION},\"ci_run_url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}"; then
+            echo "✅ Live integration tests reported"
+          else
+            echo "::warning::Quality live integration report upload failed"
           fi

@@ -21,6 +21,8 @@
     "prepublishOnly": "npm run build",
     "lint": "eslint src/",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:live": "vitest run --config vitest.live.config.ts",
     "test:watch": "vitest"
   },
   "keywords": [

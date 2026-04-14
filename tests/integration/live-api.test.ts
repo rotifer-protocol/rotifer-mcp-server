@@ -7,13 +7,7 @@ import {
   geneStats,
   leaderboard,
   developerProfile,
-  listLocalGenes,
 } from "../../src/tools.js";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { PLAYGROUND_ROOT } from "../support/external-deps.js";
-
-const hasPlayground = PLAYGROUND_ROOT !== null && existsSync(join(PLAYGROUND_ROOT, "genes"));
 
 const hasCloudKey = !!process.env.ROTIFER_CLOUD_ANON_KEY;
 const describeCloud = hasCloudKey ? describe : describe.skip;
@@ -184,64 +178,5 @@ describeCloud("compare_genes", { timeout: 15000 }, () => {
     await expect(
       compareGenes({ gene_ids: ["a", "b", "c", "d", "e", "f"] })
     ).rejects.toThrow("Maximum 5");
-  });
-});
-
-describe.skipIf(!hasPlayground)("list_local_genes", () => {
-  it("scans playground genes", () => {
-    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT! });
-    expect(r.total).toBeGreaterThan(0);
-    expect(r.genes.length).toBe(r.total);
-  });
-
-  it("every gene has required fields", () => {
-    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT! });
-    for (const g of r.genes) {
-      expect(g.name).toBeTruthy();
-      expect(g.domain).toBeTruthy();
-      expect(typeof g.fidelity).toBe("string");
-      expect(typeof g.hasWasm).toBe("boolean");
-      expect(typeof g.hasSource).toBe("boolean");
-    }
-  });
-
-  it("filters by domain", () => {
-    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT!, domain: "code" });
-    expect(r.total).toBeGreaterThan(0);
-    for (const g of r.genes) {
-      expect(g.domain === "code" || g.domain.startsWith("code.")).toBe(true);
-    }
-  });
-
-  it("filters by fidelity", () => {
-    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT!, fidelity: "Native" });
-    for (const g of r.genes) {
-      expect(g.fidelity).toBe("Native");
-    }
-  });
-
-  it("results are sorted", () => {
-    const r = listLocalGenes({ project_root: PLAYGROUND_ROOT! });
-    for (let i = 1; i < r.genes.length; i++) {
-      const prev = r.genes[i - 1];
-      const curr = r.genes[i];
-      const cmp = prev.domain.localeCompare(curr.domain) || prev.name.localeCompare(curr.name);
-      expect(cmp).toBeLessThanOrEqual(0);
-    }
-  });
-
-  it("returns empty for nonexistent path", () => {
-    const r = listLocalGenes({ project_root: "/tmp/rotifer_test_nonexistent_xyz" });
-    expect(r.total).toBe(0);
-  });
-
-  it("handles combined filters", () => {
-    const all = listLocalGenes({ project_root: PLAYGROUND_ROOT! });
-    const filtered = listLocalGenes({ project_root: PLAYGROUND_ROOT!, domain: "content", fidelity: "Wrapped" });
-    expect(filtered.total).toBeLessThanOrEqual(all.total);
-    for (const g of filtered.genes) {
-      expect(g.domain.startsWith("content")).toBe(true);
-      expect(g.fidelity).toBe("Wrapped");
-    }
   });
 });

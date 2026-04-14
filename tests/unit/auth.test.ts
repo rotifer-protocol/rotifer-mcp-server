@@ -136,3 +136,97 @@ describe("PKCE helpers", () => {
     expect(generateCodeChallenge(v1)).not.toBe(generateCodeChallenge(v2));
   });
 });
+
+describe("startOAuthCallbackServer", () => {
+  it("resolves PKCE code callbacks", async () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(
+      ((handler: TimerHandler, timeout?: number, ...args: any[]) => {
+        if (timeout === 120_000) {
+          return {
+            ref() {
+              return this;
+            },
+            unref() {
+              return this;
+            },
+          } as any;
+        }
+        return originalSetTimeout(handler, timeout, ...args);
+      }) as typeof globalThis.setTimeout,
+    );
+    const { startOAuthCallbackServer } = await import("../../src/auth.js");
+
+    const { port, waitForCallback } = await startOAuthCallbackServer();
+    const response = await fetch(`http://127.0.0.1:${port}/?code=auth-code-123`);
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Login successful");
+    await expect(waitForCallback).resolves.toBe("auth-code-123");
+
+    timeoutSpy.mockRestore();
+  });
+
+  it("resolves implicit token callbacks", async () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(
+      ((handler: TimerHandler, timeout?: number, ...args: any[]) => {
+        if (timeout === 120_000) {
+          return {
+            ref() {
+              return this;
+            },
+            unref() {
+              return this;
+            },
+          } as any;
+        }
+        return originalSetTimeout(handler, timeout, ...args);
+      }) as typeof globalThis.setTimeout,
+    );
+    const { startOAuthCallbackServer } = await import("../../src/auth.js");
+
+    const { port, waitForCallback } = await startOAuthCallbackServer();
+    const response = await fetch(
+      `http://127.0.0.1:${port}/callback/token?access_token=token-abc&refresh_token=refresh-xyz`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Login successful");
+    await expect(waitForCallback).resolves.toBe("implicit:token-abc:refresh-xyz");
+
+    timeoutSpy.mockRestore();
+  });
+
+  it("serves the browser hash relay page before the callback arrives", async () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(
+      ((handler: TimerHandler, timeout?: number, ...args: any[]) => {
+        if (timeout === 120_000) {
+          return {
+            ref() {
+              return this;
+            },
+            unref() {
+              return this;
+            },
+          } as any;
+        }
+        return originalSetTimeout(handler, timeout, ...args);
+      }) as typeof globalThis.setTimeout,
+    );
+    const { startOAuthCallbackServer } = await import("../../src/auth.js");
+
+    const { port, waitForCallback } = await startOAuthCallbackServer();
+    const relayResponse = await fetch(`http://127.0.0.1:${port}/`);
+    const relayHtml = await relayResponse.text();
+
+    expect(relayHtml).toContain("window.location.hash");
+    expect(relayHtml).toContain("Enable JavaScript to complete login.");
+
+    await fetch(`http://127.0.0.1:${port}/?code=done`);
+    await expect(waitForCallback).resolves.toBe("done");
+
+    timeoutSpy.mockRestore();
+  });
+});
