@@ -1,6 +1,6 @@
 {
   "name": "@rotifer/mcp-server",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "mcpName": "io.github.rotifer-protocol/mcp-server",
   "description": "Rotifer MCP Server — AI agents search, compare, and rank Genes (modular AI skills) from a living ecosystem of 50+ capabilities. Zero config.",
   "type": "module",

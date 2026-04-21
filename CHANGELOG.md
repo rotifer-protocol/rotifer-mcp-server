@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.6] - 2026-04-21
+
+### Changed
+
+- **Release-line catch-up** — bumped MCP Server public package version to `v0.8.6` to match the current CLI release line and eliminate cross-surface version drift in docs/install snippets.
+- **Installation pointer alignment** — this release is intended to be consumed by `rotifer-playground/mcp.json` and rotifer.dev's MCP setup surface as the current public MCP package.
+
 ## [0.8.5] - 2026-04-08
 
 ### Changed
@@ -187,6 +194,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero-config mode with built-in defaults for public Cloud API
 - Support for `npx @rotifer/mcp-server` execution
 
+[0.8.6]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.8.6
 [0.8.5]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.8.5
 [0.8.2]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.8.2
 [0.8.1]: https://www.npmjs.com/package/@rotifer/mcp-server/v/0.8.1
