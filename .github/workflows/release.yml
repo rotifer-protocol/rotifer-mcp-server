@@ -25,6 +25,8 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
+      - name: Upgrade npm for Trusted Publisher compatibility
+        run: npm install -g npm@latest && npm --version
       - run: npm ci
       - run: npm run build
       - run: npm test
