@@ -13,8 +13,8 @@ describe("local filesystem abuse", () => {
   });
 });
 
-describe("auth status", () => {
-  it("returns valid structure without crashing", () => {
+describe("local auth status", () => {
+  it("authStatus returns valid structure without crashing", () => {
     const result = authStatus();
     expect(typeof result.isLoggedIn).toBe("boolean");
     if (result.isLoggedIn) {

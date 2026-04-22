@@ -69,3 +69,36 @@ describe("listTools", { timeout: 10000 }, () => {
     }
   });
 });
+
+describe("callTool local helpers", { timeout: 10000 }, () => {
+  it("list_local_genes returns gene inventory", async () => {
+    const result = await client.callTool({ name: "list_local_genes", arguments: {} });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse((result.content as any[])[0].text);
+    expect(typeof data.total).toBe("number");
+    expect(Array.isArray(data.genes)).toBe(true);
+  });
+
+  it("list_local_agents returns agent registry", async () => {
+    const result = await client.callTool({ name: "list_local_agents", arguments: {} });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse((result.content as any[])[0].text);
+    expect(typeof data.total).toBe("number");
+    expect(Array.isArray(data.agents)).toBe(true);
+  });
+
+  it("auth_status returns login state", async () => {
+    const result = await client.callTool({ name: "auth_status", arguments: {} });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse((result.content as any[])[0].text);
+    expect(typeof data.is_logged_in).toBe("boolean");
+  });
+
+  it("returns isError for unknown tool", async () => {
+    const result = await client.callTool({ name: "nonexistent_tool", arguments: {} });
+    expect(result.isError).toBe(true);
+    const text = (result.content as any[])[0].text;
+    expect(text).toContain("Unknown tool");
+    expect(text).toContain("ListTools");
+  });
+});

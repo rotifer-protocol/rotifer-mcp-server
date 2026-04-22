@@ -48,3 +48,17 @@ describe("listResourceTemplates", { timeout: 10000 }, () => {
     }
   });
 });
+
+describe("readResource local resources", { timeout: 10000 }, () => {
+  it("rotifer://local/genes returns local inventory", async () => {
+    const result = await client.readResource({ uri: "rotifer://local/genes" });
+    expect(result.contents.length).toBe(1);
+    const data = JSON.parse(result.contents[0].text as string);
+    expect(typeof data.total).toBe("number");
+    expect(Array.isArray(data.genes)).toBe(true);
+  });
+
+  it("unknown URI throws error", async () => {
+    await expect(client.readResource({ uri: "rotifer://nonexistent/path" })).rejects.toThrow();
+  });
+});
