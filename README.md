@@ -239,8 +239,8 @@ This MCP server works best alongside the [Rotifer CLI](https://github.com/rotife
 
 ```bash
 npm install -g @rotifer/playground
-rotifer init my-project && cd my-project
-rotifer hello   # your first agent in 30 seconds
+rotifer init my-agent && cd my-agent
+rotifer hello --template quality-advisor   # your first Agent workspace in seconds
 ```
 
 ## Links
