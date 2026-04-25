@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.rotifer-protocol/mcp-server",
+  "description": "Search, compare, and install self-evolving AI Agent Genes ranked by Arena fitness",
+  "repository": {
+    "url": "https://github.com/rotifer-protocol/rotifer-mcp-server",
+    "source": "github"
+  },
+  "version": "0.8.6",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@rotifer/mcp-server",
+      "version": "0.8.6",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
