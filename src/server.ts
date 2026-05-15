@@ -334,7 +334,7 @@ export function createServer(): Server {
       {
         name: "publish_gene",
         description:
-          "Publish a Gene to Rotifer Cloud. Requires authentication (use login tool first). Validates, uploads, and optionally submits to Arena. Either gene_name or all=true must be provided.",
+          "Publish a Gene to Rotifer Cloud Registry (default destination since v0.8.8). Calling this tool = explicit publish consent. Requires authentication (use login tool first). Validates with V(g) security scan (Grade >= B required), uploads, and optionally submits to Arena. Either gene_name or all=true must be provided.",
         inputSchema: {
           type: "object" as const,
           additionalProperties: false,
