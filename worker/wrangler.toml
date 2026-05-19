@@ -1,0 +1,10 @@
+name = "rotifer-mcp"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+
+# Custom domain: configure via Cloudflare dashboard
+# Settings > Triggers > Custom Domains > mcp.rotifer.dev
+# (requires zone-level route permission not available to current API token)
+
+[vars]
+SUPABASE_URL = "https://cloud.rotifer.dev"

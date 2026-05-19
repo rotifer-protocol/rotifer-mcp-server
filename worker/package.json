@@ -1,0 +1,14 @@
+{
+  "name": "rotifer-mcp-worker",
+  "version": "0.8.7",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250401.0",
+    "typescript": "^5.8.0",
+    "wrangler": "^4.90.0"
+  }
+}
