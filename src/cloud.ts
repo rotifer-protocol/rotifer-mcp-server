@@ -725,6 +725,21 @@ export function logMcpCall(entry: {
   }).catch(() => {});
 }
 
+/**
+ * Record a gene invocation for §33.4 anti-manipulation metrics.
+ * Fire-and-forget — failures are silently ignored.
+ */
+export function logGeneInvocation(geneId: string, callerAgentId: string): void {
+  fetch(rpcUrl("log_gene_invocation"), {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      p_gene_id: geneId,
+      p_caller_agent_id: callerAgentId,
+    }),
+  }).catch(() => {});
+}
+
 export interface McpStatsResult {
   period: string;
   totalCalls: number;
