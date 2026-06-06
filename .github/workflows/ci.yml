@@ -61,6 +61,51 @@ jobs:
           fi
           echo "✅ No contamination detected"
 
+  broken-links:
+    name: Broken Link Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      # Self-contained relative-link checker (ADR-294 D3): offline repo-local
+      # markdown only; no internal/ dependency; linear regex — ReDoS-safe.
+      - name: Check relative markdown links (offline, repo-local only)
+        run: |
+          python3 - <<'PY'
+          import re, sys, pathlib
+          from urllib.parse import unquote
+          INLINE = re.compile(r'!?\[[^\]]*\]\(([^)]+)\)')
+          SCHEME = re.compile(r'^[a-zA-Z][a-zA-Z0-9+.-]*:')
+          FENCE = re.compile(r'^\s*(```|~~~)')
+          SKIP = {'.git', 'node_modules'}
+          broken, scanned = [], 0
+          for md in pathlib.Path('.').rglob('*.md'):
+              if any(p in SKIP for p in md.parts):
+                  continue
+              scanned += 1
+              in_fence = False
+              for line in md.read_text(encoding='utf-8', errors='replace').splitlines():
+                  if FENCE.match(line):
+                      in_fence = not in_fence
+                      continue
+                  if in_fence:
+                      continue
+                  for m in INLINE.finditer(line):
+                      raw = m.group(1).strip()
+                      target = (raw.split()[0] if raw else '').split('#', 1)[0]
+                      if (not target or target.startswith('#')
+                              or target.startswith('/') or SCHEME.match(target)):
+                          continue
+                      if not (md.parent / unquote(target)).exists():
+                          broken.append(f"{md}: {raw}")
+          print(f"scanned {scanned} markdown files")
+          if broken:
+              print("::error::Broken relative links found:")
+              for b in broken:
+                  print(b)
+              sys.exit(1)
+          print("✅ No broken relative links")
+          PY
+
   security-report:
     name: Security & Dependency Audit
     runs-on: ubuntu-latest
