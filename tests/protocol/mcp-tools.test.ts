@@ -94,11 +94,11 @@ describe("callTool local helpers", { timeout: 10000 }, () => {
     expect(typeof data.is_logged_in).toBe("boolean");
   });
 
-  it("returns isError for unknown tool", async () => {
-    const result = await client.callTool({ name: "nonexistent_tool", arguments: {} });
-    expect(result.isError).toBe(true);
-    const text = (result.content as any[])[0].text;
-    expect(text).toContain("Unknown tool");
-    expect(text).toContain("ListTools");
+  it("rejects with a JSON-RPC error for unknown tool", async () => {
+    // Unknown tool names are a protocol error (MethodNotFound), not a tool
+    // execution failure — the client call must reject, not resolve with isError.
+    await expect(
+      client.callTool({ name: "nonexistent_tool", arguments: {} }),
+    ).rejects.toThrow(/Unknown tool/);
   });
 });
