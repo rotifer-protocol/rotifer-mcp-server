@@ -6,6 +6,8 @@ import {
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  McpError,
+  ErrorCode,
 } from "@modelcontextprotocol/sdk/types.js";
 import { searchGenes, getGeneDetail, arenaRankings, compareGenes, geneStats, leaderboard, developerProfile, listLocalGenes, listLocalAgents, submitToArena, installGeneFromCloud, createLocalAgent, agentRun, compileGene, runGene, initGene, scanGenes, wrapGene, testGene, publishGene, authStatus, login, logout, geneVersions, mcpStats, geneReputation, myReputation, domainSuggestion, vgScan } from "./tools.js";
 import { getGeneStatsRpc, getReputationLeaderboard, getDeveloperProfile, getGene, logMcpCall, logGeneInvocation } from "./cloud.js";
@@ -557,7 +559,7 @@ export function createServer(): Server {
           result = vgScan(args as any); break;
         default:
           logMcpCall({ tool_name: name, success: false, latency_ms: Date.now() - startMs, caller: loadCredentials()?.user?.id ?? null });
-          return { content: [{ type: "text", text: `Unknown tool: ${name}. Use ListTools to see available tools.` }], isError: true };
+          throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}. Use ListTools to see available tools.`);
       }
 
       const callerId = loadCredentials()?.user?.id ?? null;
@@ -586,6 +588,12 @@ export function createServer(): Server {
 
       return { content };
     } catch (error: any) {
+      // Protocol-level errors (e.g. unknown tool name) must surface as JSON-RPC
+      // errors, not as a successful result with isError:true. Only genuine tool
+      // execution failures degrade to an isError content result below.
+      if (error instanceof McpError) {
+        throw error;
+      }
       logMcpCall({
         tool_name: name,
         gene_id: extractGeneId(name, (args || {}) as Record<string, unknown>),
