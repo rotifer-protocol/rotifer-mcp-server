@@ -157,7 +157,7 @@ describe("startOAuthCallbackServer", () => {
     );
     const { startOAuthCallbackServer } = await import("../../src/auth.js");
 
-    const { port, waitForCallback } = await startOAuthCallbackServer();
+    const { port, waitForCallback } = await startOAuthCallbackServer(0);
     const response = await fetch(`http://127.0.0.1:${port}/?code=auth-code-123`);
 
     expect(response.status).toBe(200);
@@ -186,7 +186,7 @@ describe("startOAuthCallbackServer", () => {
     );
     const { startOAuthCallbackServer } = await import("../../src/auth.js");
 
-    const { port, waitForCallback } = await startOAuthCallbackServer();
+    const { port, waitForCallback } = await startOAuthCallbackServer(0);
     const response = await fetch(
       `http://127.0.0.1:${port}/callback/token?access_token=token-abc&refresh_token=refresh-xyz`,
     );
@@ -217,7 +217,7 @@ describe("startOAuthCallbackServer", () => {
     );
     const { startOAuthCallbackServer } = await import("../../src/auth.js");
 
-    const { port, waitForCallback } = await startOAuthCallbackServer();
+    const { port, waitForCallback } = await startOAuthCallbackServer(0);
     const relayResponse = await fetch(`http://127.0.0.1:${port}/`);
     const relayHtml = await relayResponse.text();
 

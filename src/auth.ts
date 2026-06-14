@@ -71,11 +71,26 @@ export function generateCodeChallenge(verifier: string): string {
 }
 
 /**
- * Start a local OAuth callback server on a random port (127.0.0.1:0).
- * Returns the bound port immediately so the caller can construct the auth URL,
- * plus a promise that resolves when the callback arrives.
+ * Fixed loopback port for the OAuth callback server.
+ *
+ * Must exactly match a Supabase Auth "Redirect URLs" allow-list entry
+ * (`http://localhost:9876/callback`). A random port cannot be used here:
+ * Supabase does not honor a port wildcard in the allow-list, so an unlisted
+ * `redirect_to` is silently dropped and the browser is bounced to the Site URL
+ * (the website) instead of returning the token to this local server.
  */
-export async function startOAuthCallbackServer(): Promise<{
+const OAUTH_CALLBACK_PORT = 9876;
+
+/**
+ * Start the local OAuth callback server. Defaults to the fixed, allow-listed
+ * loopback port (127.0.0.1:9876) so the OAuth `redirect_to` matches Supabase's
+ * Redirect URLs allow-list; pass `0` (e.g. in tests) for a random ephemeral
+ * port to avoid cross-test port contention. Returns the bound port plus a
+ * promise that resolves when the callback arrives.
+ */
+export async function startOAuthCallbackServer(
+  port: number = OAUTH_CALLBACK_PORT,
+): Promise<{
   port: number;
   waitForCallback: Promise<string>;
 }> {
@@ -136,7 +151,7 @@ if (window.location.hash) {
       }
     });
 
-    server.listen(0, "127.0.0.1", () => {
+    server.listen(port, "127.0.0.1", () => {
       const addr = server.address() as { port: number };
       resolve({ port: addr.port, waitForCallback });
     });
