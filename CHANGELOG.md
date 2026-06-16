@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.8.6...v0.9.0) (2026-06-16)
+
+
+### Features
+
+* **logging:** record caller identity in mcp_call_log + gene_invocation_log ([2f271bf](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/2f271bf31f3d3997f8656c77b196298727c337db))
+* **v0.8.8 §3.5:** align publish_gene tool with Cloud Registry default ([e53b4ee](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/e53b4ee3343bc097db2105db65b678b5faf4303b))
+* **worker:** scaffold Cloudflare Worker for MCP remote transport ([c3e2a12](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/c3e2a1221fb4289ab4e107051f2b974d1587bcb1))
+
+
+### Bug Fixes
+
+* **auth:** bind the OAuth login callback to the allow-listed port 9876 ([#51](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/51)) ([0db061c](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/0db061cdd0f5d901707271e30ab0cf945c0193a7))
+* **deps:** npm audit fix for fast-uri and hono CVEs ([fc2193d](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/fc2193df82b424e84120b852715fbc0b0ed37e0e))
+* **deps:** override qs to ^6.15.2 to resolve DoS advisory GHSA-q8mj-m7cp-5q26 ([#45](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/45)) ([c11ce1e](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/c11ce1e35d9f73752fcfce3d8000aa2527a0fe09)), closes [#37](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/37)
+* publish MCP registry metadata from releases ([4184393](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/4184393089b289ce0261ca2bc02a4368e3c6f022))
+* **server:** throw JSON-RPC error for unknown tool names instead of isError ([#46](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/46)) ([c5f6679](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/c5f66799812e7aeb393b786d951b359cf4c8b9f5)), closes [#36](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/36)
+
 ## [0.8.6] - 2026-04-21
 
 ### Changed
