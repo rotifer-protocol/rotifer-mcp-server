@@ -7,7 +7,9 @@
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
       "extra-files": [
-        { "type": "json", "path": "worker/package.json", "jsonpath": "$.version" }
+        { "type": "json", "path": "worker/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "server.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "server.json", "jsonpath": "$.packages[0].version" }
       ]
     }
   }
