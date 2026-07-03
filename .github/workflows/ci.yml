@@ -124,8 +124,28 @@ jobs:
           QUALITY_SUPABASE_URL: ${{ secrets.QUALITY_SUPABASE_URL }}
           QUALITY_SUPABASE_KEY: ${{ secrets.QUALITY_SUPABASE_SERVICE_KEY }}
         run: |
+          normalize_version() {
+            case "$1" in
+              v*) printf '%s' "$1" ;;
+              *) printf 'v%s' "$1" ;;
+            esac
+          }
+          resolve_release_line_version() {
+            local fallback="$1"
+            local resolved
+            resolved=$(npm view @rotifer/playground version --registry https://registry.npmjs.org/ 2>/dev/null || true)
+            if [ -z "$resolved" ]; then
+              resolved="$fallback"
+            fi
+            normalize_version "$resolved"
+          }
           VERSION=$(node -p "require('./package.json').version")
-          NPM_AUDIT=$(npm audit --json --registry https://registry.npmjs.org/ 2>/dev/null || echo '{}')
+          COMPONENT_VERSION=$(normalize_version "${VERSION}")
+          RELEASE_LINE_VERSION=$(resolve_release_line_version "${VERSION}")
+          # `npm audit` exits non-zero when vulnerabilities exist; `|| echo '{}'`
+          # would append '{}' to the real JSON and break JSON.parse (all counts → 0).
+          NPM_AUDIT=$(npm audit --json --registry https://registry.npmjs.org/ 2>/dev/null || true)
+          [ -z "$NPM_AUDIT" ] && NPM_AUDIT='{}'
           CRITICAL=$(echo "$NPM_AUDIT" | node -p "try{JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).metadata?.vulnerabilities?.critical||0}catch{0}")
           HIGH=$(echo "$NPM_AUDIT" | node -p "try{JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).metadata?.vulnerabilities?.high||0}catch{0}")
           MODERATE=$(echo "$NPM_AUDIT" | node -p "try{JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).metadata?.vulnerabilities?.moderate||0}catch{0}")
@@ -137,7 +157,7 @@ jobs:
           if curl --fail-with-body -sS -X POST "${QUALITY_SUPABASE_URL}/rest/v1/security_scan_results" \
             -H "apikey: ${QUALITY_SUPABASE_KEY}" -H "Authorization: Bearer ${QUALITY_SUPABASE_KEY}" \
             -H "Content-Type: application/json" -H "Prefer: return=minimal" \
-            -d "{\"version\":\"v${VERSION}\",\"component\":\"mcp\",\"scan_type\":\"npm_audit\",\"grade\":\"${GRADE}\",\"severity_counts\":{\"critical\":${CRITICAL},\"high\":${HIGH},\"moderate\":${MODERATE},\"low\":${LOW}},\"source\":\"ci\",\"ci_run_url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}"; then
+            -d "{\"version\":\"${COMPONENT_VERSION}\",\"release_line_version\":\"${RELEASE_LINE_VERSION}\",\"component\":\"mcp\",\"scan_type\":\"npm_audit\",\"grade\":\"${GRADE}\",\"severity_counts\":{\"critical\":${CRITICAL},\"high\":${HIGH},\"moderate\":${MODERATE},\"low\":${LOW}},\"source\":\"ci\",\"ci_run_url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}"; then
             echo "✅ Security scan reported"
           else
             echo "::warning::Security scan report upload failed"
@@ -147,7 +167,7 @@ jobs:
           if curl --fail-with-body -sS -X POST "${QUALITY_SUPABASE_URL}/rest/v1/dependency_audit_logs" \
             -H "apikey: ${QUALITY_SUPABASE_KEY}" -H "Authorization: Bearer ${QUALITY_SUPABASE_KEY}" \
             -H "Content-Type: application/json" -H "Prefer: return=minimal" \
-            -d "{\"component\":\"mcp\",\"ecosystem\":\"npm\",\"total_deps\":${TOTAL},\"vulnerable_deps\":${VULNERABLE_DEPS},\"advisories\":[],\"ci_run_url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}"; then
+            -d "{\"component\":\"mcp\",\"release_line_version\":\"${RELEASE_LINE_VERSION}\",\"ecosystem\":\"npm\",\"total_deps\":${TOTAL},\"vulnerable_deps\":${VULNERABLE_DEPS},\"advisories\":[],\"ci_run_url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}"; then
             echo "✅ Dependency audit reported"
           else
             echo "::warning::Dependency audit report upload failed"
