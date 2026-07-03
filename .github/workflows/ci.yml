@@ -154,10 +154,15 @@ jobs:
           GRADE="PASS"
           if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then GRADE="FAIL"; fi
           VULNERABLE_DEPS=$((CRITICAL + HIGH + MODERATE + LOW))
+          # Extract per-advisory detail so the dashboard can show which
+          # vulnerabilities exist, not just the counts. Emits a JSON array
+          # (already properly escaped by JSON.stringify) injected verbatim.
+          FINDINGS=$(echo "$NPM_AUDIT" | node -e 'let a; try { a = JSON.parse(require("fs").readFileSync("/dev/stdin","utf8")); } catch { process.stdout.write("[]"); process.exit(0); } const out=[]; const rank={critical:0,high:1,moderate:2,low:3}; for (const [name,v] of Object.entries(a.vulnerabilities||{})) { const advs=(v.via||[]).filter((x)=>typeof x==="object"); if (advs.length===0){ out.push({package:name,severity:v.severity,title:"Depends on a vulnerable dependency",url:"",range:v.range||""}); } else { for (const ad of advs){ out.push({package:name,severity:ad.severity||v.severity,title:ad.title||"",url:ad.url||"",range:v.range||""}); } } } out.sort((p,q)=>(rank[p.severity]??9)-(rank[q.severity]??9)); process.stdout.write(JSON.stringify(out.slice(0,50)));')
+          [ -z "$FINDINGS" ] && FINDINGS='[]'
           if curl --fail-with-body -sS -X POST "${QUALITY_SUPABASE_URL}/rest/v1/security_scan_results" \
             -H "apikey: ${QUALITY_SUPABASE_KEY}" -H "Authorization: Bearer ${QUALITY_SUPABASE_KEY}" \
             -H "Content-Type: application/json" -H "Prefer: return=minimal" \
-            -d "{\"version\":\"${COMPONENT_VERSION}\",\"release_line_version\":\"${RELEASE_LINE_VERSION}\",\"component\":\"mcp\",\"scan_type\":\"npm_audit\",\"grade\":\"${GRADE}\",\"severity_counts\":{\"critical\":${CRITICAL},\"high\":${HIGH},\"moderate\":${MODERATE},\"low\":${LOW}},\"source\":\"ci\",\"ci_run_url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}"; then
+            -d "{\"version\":\"${COMPONENT_VERSION}\",\"release_line_version\":\"${RELEASE_LINE_VERSION}\",\"component\":\"mcp\",\"scan_type\":\"npm_audit\",\"grade\":\"${GRADE}\",\"severity_counts\":{\"critical\":${CRITICAL},\"high\":${HIGH},\"moderate\":${MODERATE},\"low\":${LOW}},\"findings\":${FINDINGS},\"source\":\"ci\",\"ci_run_url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}"; then
             echo "✅ Security scan reported"
           else
             echo "::warning::Security scan report upload failed"
