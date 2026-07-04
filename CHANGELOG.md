@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.9.1...v0.10.0) (2026-07-04)
+
+
+### Features
+
+* **ci:** upload npm audit advisory detail to findings column ([#74](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/74)) ([2ea08e6](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/2ea08e6e3db3904396be5df9f42ff11cba5aa64f))
+
+
+### Bug Fixes
+
+* **ci:** correct dependency_audit_logs payload + surface audit upload failures ([#72](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/72)) ([638040b](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/638040b822b9736e82290949082ac5d3a5f7f5f4))
+* **ci:** real npm audit counts + release_line_version in audit reports ([#73](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/73)) ([90303e6](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/90303e6506313d5250728721bda6caa2d27bd8cb))
+* **ci:** round duration_ms and surface upload failures in quality report ([#70](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/70)) ([c4e04f5](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/c4e04f574b8cdc45cf9fe569a2d984fd52636733))
+
 ## [0.9.1](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.9.0...v0.9.1) (2026-06-22)
 
 
