@@ -8,6 +8,11 @@ dist/
 .wrangler/
 .temp/
 
+# CI test/coverage artifacts (generated on the runner)
+coverage/
+test-results.json
+live-results.json
+
 # Registry tokens
 .mcpregistry_*
 
