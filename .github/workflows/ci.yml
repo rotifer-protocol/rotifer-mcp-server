@@ -243,3 +243,66 @@ jobs:
           else
             echo "::warning::Quality test report upload failed"
           fi
+
+      # The default vitest config excludes the live cloud suite (vitest.config.ts
+      # excludes tests/integration/live-*.test.ts + v075-migrations.test.ts), so the
+      # "unit" row above misses the integration tests that v0.8.6 used to report as a
+      # separate `integration` row. Run the live config and upload it as its own row so
+      # the Quality Observatory count reflects the real test surface again.
+      - name: Run live integration tests with JSON reporter
+        if: env.ROTIFER_CLOUD_ANON_KEY != ''
+        env:
+          ROTIFER_CLOUD_ANON_KEY: ${{ secrets.ROTIFER_CLOUD_ANON_KEY }}
+        run: npx vitest run --config vitest.live.config.ts --reporter=json --outputFile=live-results.json 2>/dev/null || true
+
+      - name: Report integration test results to Supabase
+        if: env.QUALITY_SUPABASE_URL != ''
+        env:
+          QUALITY_SUPABASE_URL: ${{ secrets.QUALITY_SUPABASE_URL }}
+          QUALITY_SUPABASE_KEY: ${{ secrets.QUALITY_SUPABASE_SERVICE_KEY }}
+        run: |
+          # No file means the live suite never ran (ROTIFER_CLOUD_ANON_KEY absent) —
+          # skip rather than fabricate a 0-test integration row.
+          if [ ! -f live-results.json ]; then
+            echo "No live integration results — skipping integration report"
+            exit 0
+          fi
+          normalize_version() {
+            case "$1" in
+              v*) printf '%s' "$1" ;;
+              *) printf 'v%s' "$1" ;;
+            esac
+          }
+          resolve_release_line_version() {
+            local fallback="$1"
+            local resolved
+            resolved=$(npm view @rotifer/playground version --registry https://registry.npmjs.org/ 2>/dev/null || true)
+            if [ -z "$resolved" ]; then
+              resolved="$fallback"
+            fi
+            normalize_version "$resolved"
+          }
+          VERSION=$(node -p "require('./package.json').version")
+          COMPONENT_VERSION=$(normalize_version "${VERSION}")
+          RELEASE_LINE_VERSION=$(resolve_release_line_version "${VERSION}")
+          TOTAL=$(node -p "JSON.parse(require('fs').readFileSync('live-results.json','utf8')).numTotalTests || 0")
+          PASSED=$(node -p "JSON.parse(require('fs').readFileSync('live-results.json','utf8')).numPassedTests || 0")
+          FAILED=$(node -p "JSON.parse(require('fs').readFileSync('live-results.json','utf8')).numFailedTests || 0")
+          # duration_ms is an integer column — round to avoid Postgres 22P02.
+          DURATION=$(node -p "Math.round(JSON.parse(require('fs').readFileSync('live-results.json','utf8')).testResults?.reduce((s,r) => s + (r.endTime - r.startTime), 0) || 0)")
+          # A 0-test result means the suite collected nothing (config/env issue) —
+          # don't push a row that would understate the integration surface.
+          if [ "${TOTAL}" -eq 0 ]; then
+            echo "Live integration suite produced 0 tests — skipping integration report"
+            exit 0
+          fi
+          if curl --fail-with-body -sS -X POST "${QUALITY_SUPABASE_URL}/rest/v1/release_test_reports" \
+            -H "apikey: ${QUALITY_SUPABASE_KEY}" \
+            -H "Authorization: Bearer ${QUALITY_SUPABASE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d "{\"version\":\"${COMPONENT_VERSION}\",\"release_line_version\":\"${RELEASE_LINE_VERSION}\",\"component\":\"mcp\",\"test_type\":\"integration\",\"total_tests\":${TOTAL},\"passed\":${PASSED},\"failed\":${FAILED},\"duration_ms\":${DURATION},\"coverage_pct\":0,\"ci_run_url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}"; then
+            echo "✅ Integration reported (release-line ${RELEASE_LINE_VERSION}, ${TOTAL} tests)"
+          else
+            echo "::warning::Integration test report upload failed"
+          fi
