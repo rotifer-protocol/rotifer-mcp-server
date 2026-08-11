@@ -6,12 +6,12 @@
     "url": "https://github.com/rotifer-protocol/rotifer-mcp-server",
     "source": "github"
   },
-  "version": "0.9.1",
+  "version": "0.10.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@rotifer/mcp-server",
-      "version": "0.9.1",
+      "version": "0.10.0",
       "transport": {
         "type": "stdio"
       }
