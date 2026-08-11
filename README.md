@@ -89,7 +89,7 @@ AI:  → wrap_gene({ gene_name: "my-search", domain: "search.web", fidelity: "Wr
      → publish_gene({ gene_name: "my-search", changelog: "Initial release" })
 ```
 
-## Tools (29)
+## Tools (30)
 
 ### Discovery & Analytics
 
@@ -122,6 +122,7 @@ AI:  → wrap_gene({ gene_name: "my-search", domain: "search.web", fidelity: "Wr
 | `wrap_gene` | Wrap a function/skill as a Gene | `gene_name`, `domain`, `fidelity`, `from_skill`, `from_clawhub` |
 | `test_gene` | Test a Gene (schema validation + sandbox) | `gene_name`, `verbose`, `compliance` |
 | `compile_gene` | Compile a Gene to WASM IR | `gene_name`, `check`, `wasm_path`, `lang` |
+| `doctor` | Check the local TypeScript→WASM toolchain (esbuild / javy) and report what is missing — read-only; use when `compile_gene` fails | `project_root` |
 | `run_gene` | Execute a local Gene | `gene_name`, `input`, `verbose`, `no_sandbox`, `trust_unsigned` |
 | `publish_gene` | Publish to Rotifer Cloud | `gene_name`, `all`, `description`, `changelog`, `skip_arena`, `skip_security` |
 | `install_gene` | Install a Gene from Cloud Registry | `gene_id`, `project_root`, `force` |
@@ -193,7 +194,7 @@ Try asking your AI: *"Use the rotifer-hello prompt to build me an agent"* or *"U
 ┌─────────────────────────────────────────────────┐
 │  @rotifer/mcp-server                            │
 │                                                 │
-│  29 Tools  7 Resources  4 Prompts  Local Scanner│
+│  30 Tools  7 Resources  4 Prompts  Local Scanner│
 │  ┌──────────┐  ┌───────────┐   ┌────────────┐  │
 │  │ discover │  │rotifer:// │   │ ./genes/    │  │
 │  │ lifecycle│  │genes/stats│   │ phenotype   │  │

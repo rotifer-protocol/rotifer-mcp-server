@@ -359,6 +359,18 @@ export function compileGene(options: {
   return rotiferCmd(args, root);
 }
 
+/**
+ * Report on the local TypeScript→WASM toolchain (esbuild / javy).
+ *
+ * Read-only: it inspects the environment and prints findings, changing nothing.
+ * Exposed over MCP so an agent whose `compile_gene` call failed can diagnose the
+ * cause itself instead of reporting an opaque error — a missing toolchain is by
+ * far the most common reason compilation fails.
+ */
+export function doctor(options: { project_root?: string }): ShellResult {
+  return rotiferCmd(["doctor"], resolveProjectRoot(options.project_root));
+}
+
 export function runGene(options: {
   gene_name: string;
   project_root?: string;

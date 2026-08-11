@@ -9,7 +9,7 @@ import {
   McpError,
   ErrorCode,
 } from "@modelcontextprotocol/sdk/types.js";
-import { searchGenes, getGeneDetail, arenaRankings, compareGenes, geneStats, leaderboard, developerProfile, listLocalGenes, listLocalAgents, submitToArena, installGeneFromCloud, createLocalAgent, agentRun, compileGene, runGene, initGene, scanGenes, wrapGene, testGene, publishGene, authStatus, login, logout, geneVersions, mcpStats, geneReputation, myReputation, domainSuggestion, vgScan } from "./tools.js";
+import { searchGenes, getGeneDetail, arenaRankings, compareGenes, geneStats, leaderboard, developerProfile, listLocalGenes, listLocalAgents, submitToArena, installGeneFromCloud, createLocalAgent, agentRun, compileGene, runGene, initGene, scanGenes, wrapGene, testGene, publishGene, authStatus, login, logout, geneVersions, mcpStats, geneReputation, myReputation, domainSuggestion, vgScan, doctor } from "./tools.js";
 import { getGeneStatsRpc, getReputationLeaderboard, getDeveloperProfile, getGene, logMcpCall, logGeneInvocation } from "./cloud.js";
 import { loadCredentials } from "./auth.js";
 import { getPackageVersion, getVersionInfo, formatUpdateHint, type VersionInfo } from "./version.js";
@@ -248,6 +248,18 @@ export function createServer(): Server {
             lang: { type: "string", enum: ["ts", "wasm"], description: "Force compilation mode (auto-detected by default)" },
           },
           required: ["gene_name"],
+        },
+      },
+      {
+        name: "doctor",
+        description:
+          "Check the local TypeScript→WASM toolchain (esbuild / javy) and report what is missing or misconfigured. Read-only: inspects the environment and changes nothing. Use this when compile_gene fails — a missing or broken toolchain is the most common cause.",
+        inputSchema: {
+          type: "object" as const,
+          additionalProperties: false,
+          properties: {
+            project_root: { type: "string", description: "Project root path" },
+          },
         },
       },
       {
@@ -523,6 +535,8 @@ export function createServer(): Server {
           result = runGene(args as any); break;
         case "init_gene":
           result = initGene(args as any); break;
+        case "doctor":
+          result = doctor(args as any); break;
         case "scan_genes":
           result = scanGenes(args as any); break;
         case "wrap_gene":
