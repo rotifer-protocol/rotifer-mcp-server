@@ -103,7 +103,7 @@ export async function developerProfile(args: {
   return getDeveloperProfile(args.username);
 }
 
-export { listLocalGenes, listLocalAgents, createLocalAgent, agentRun, compileGene, runGene, initGene, scanGenes, wrapGene, testGene, publishGene, vgScan } from "./local.js";
+export { listLocalGenes, listLocalAgents, createLocalAgent, agentRun, compileGene, runGene, initGene, scanGenes, wrapGene, testGene, publishGene, vgScan, doctor } from "./local.js";
 
 export async function mcpStats(args: {
   days?: number;

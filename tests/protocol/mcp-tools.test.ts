@@ -23,9 +23,9 @@ afterAll(async () => {
 });
 
 describe("listTools", { timeout: 10000 }, () => {
-  it("returns exactly 29 tools", async () => {
+  it("returns exactly 30 tools", async () => {
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(29);
+    expect(tools.length).toBe(30);
   });
 
   it("includes all expected tool names", async () => {
@@ -58,6 +58,7 @@ describe("listTools", { timeout: 10000 }, () => {
     expect(names).toContain("get_my_reputation");
     expect(names).toContain("suggest_domain");
     expect(names).toContain("vg_scan");
+    expect(names).toContain("doctor");
   });
 
   it("every tool has description and inputSchema", async () => {
