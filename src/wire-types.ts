@@ -41,6 +41,7 @@ export interface SearchGeneRow {
   updated_at: string;
   owner_username: string | null;
   rank: number;
+  total_count?: number | null;
   previous_version_id?: string | null;
   changelog?: string | null;
 }
