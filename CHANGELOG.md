@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.10.0...v0.11.0) (2026-08-14)
+
+
+### Features
+
+* **cloud:** download and verify WASM artifact in install_gene ([#99](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/99)) ([831db1f](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/831db1fb72ceeb0c5c1d668c7cfa14a286075a69))
+
+
+### Bug Fixes
+
+* **cloud:** delegate search_genes pagination to the server ([#100](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/100)) ([112fb40](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/112fb400d9a614521e99cea4b8ad9817cea5f6ab))
+* **local:** pin npx fallback to @rotifer/playground ([#98](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/98)) ([ae68c8d](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/ae68c8d0d21535a60fedbd9c19431e5c6f85554c))
+
 ## [0.10.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.9.1...v0.10.0) (2026-08-11)
 
 
