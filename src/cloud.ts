@@ -1,5 +1,6 @@
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { loadCredentials } from "./auth.js";
 import { validateGeneName } from "./validate-gene-name.js";
 import type {
@@ -118,6 +119,8 @@ export interface Gene {
   fidelity: string;
   description: string;
   wasmSize: number;
+  wasmHash?: string | null;
+  wasmPath?: string | null;
   downloads: number;
   reputationScore: number | null;
   previousVersionId: string | null;
@@ -227,6 +230,8 @@ function mapGeneRow(row: GeneRow): Gene & { phenotype: Record<string, unknown> }
     description: row.description,
     phenotype: row.phenotype || {},
     wasmSize: row.wasm_size || 0,
+    wasmHash: row.wasm_hash ?? null,
+    wasmPath: row.wasm_path ?? null,
     downloads: row.downloads || 0,
     reputationScore: row.reputation_score ?? null,
     previousVersionId: row.previous_version_id ?? null,
@@ -802,6 +807,8 @@ export interface InstallResult {
   domain: string;
   fidelity: string;
   installedTo: string;
+  wasmDownloaded: boolean;
+  wasmSize: number | null;
 }
 
 export async function installGene(
@@ -834,6 +841,36 @@ export async function installGene(
     JSON.stringify(gene.phenotype || {}, null, 2) + "\n"
   );
 
+  let didDownloadWasm = false;
+  let wasmSize: number | null = null;
+  if (gene.wasmPath) {
+    const config = loadCloudConfig();
+    const wasmUrl = `${config.endpoint.replace(/\/+$/, "")}/storage/v1/object/public/gene-wasm/${gene.wasmPath}`;
+    const res = await fetch(wasmUrl);
+    if (!res.ok) {
+      throw new Error(`Failed to download WASM (${res.status}) from ${wasmUrl}`);
+    }
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (gene.wasmSize && bytes.length !== gene.wasmSize) {
+      throw new Error(
+        `WASM size mismatch: expected ${gene.wasmSize} bytes, got ${bytes.length}. ` +
+        "The stored artifact may be corrupted; not installing it."
+      );
+    }
+    if (gene.wasmHash) {
+      const digest = createHash("sha256").update(bytes).digest("hex");
+      if (digest !== gene.wasmHash) {
+        throw new Error(
+          `WASM hash mismatch: expected ${gene.wasmHash}, got ${digest}. ` +
+          "The stored artifact may be corrupted or tampered with; not installing it."
+        );
+      }
+    }
+    writeFileSync(join(geneDir, "gene.ir.wasm"), bytes);
+    didDownloadWasm = true;
+    wasmSize = bytes.length;
+  }
+
   writeFileSync(
     join(geneDir, ".cloud-manifest.json"),
     JSON.stringify(
@@ -863,5 +900,7 @@ export async function installGene(
     domain: gene.domain,
     fidelity: gene.fidelity,
     installedTo: geneDir,
+    wasmDownloaded: didDownloadWasm,
+    wasmSize,
   };
 }
