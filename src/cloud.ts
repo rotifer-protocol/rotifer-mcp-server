@@ -135,35 +135,6 @@ export interface GeneListResult {
   has_more: boolean;
 }
 
-function compareSemver(a: string, b: string): number {
-  const pa = a.replace(/^v/, "").split(".");
-  const pb = b.replace(/^v/, "").split(".");
-  for (let i = 0; i < 3; i++) {
-    const na = parseInt(pa[i] || "0", 10);
-    const nb = parseInt(pb[i] || "0", 10);
-    if (na !== nb) return na - nb;
-  }
-  const preA = a.includes("-") ? a.split("-").slice(1).join("-") : "";
-  const preB = b.includes("-") ? b.split("-").slice(1).join("-") : "";
-  if (!preA && preB) return 1;
-  if (preA && !preB) return -1;
-  return preA.localeCompare(preB);
-}
-
-function deduplicateLatestVersion(genes: Gene[]): Gene[] {
-  const map = new Map<string, Gene>();
-  for (const g of genes) {
-    const key = `${g.owner}\0${g.name}`;
-    const existing = map.get(key);
-    if (!existing || compareSemver(g.version, existing.version) > 0) {
-      map.set(key, g);
-    }
-  }
-  return [...map.values()].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
-}
-
 export async function listGenes(options: {
   domain?: string;
   query?: string;
@@ -176,8 +147,8 @@ export async function listGenes(options: {
   const page = Math.max(1, options.page || 1);
   const offset = (page - 1) * limit;
 
-  const fetchLimit = limit * 3;
-
+  // The search_genes RPC deduplicates versions server-side and returns the
+  // exact total_count per row, so pagination is delegated to the server.
   const res = await fetch(rpcUrl("search_genes"), {
     method: "POST",
     headers: headers(),
@@ -186,14 +157,14 @@ export async function listGenes(options: {
       p_domain: options.domain || null,
       p_fidelity: options.fidelity || null,
       p_sort: options.sort || (options.query ? "relevance" : "newest"),
-      p_limit: fetchLimit,
-      p_offset: 0,
+      p_limit: limit,
+      p_offset: offset,
     }),
   });
 
   const data = await handleResponse<SearchGeneRow[]>(res);
 
-  const allGenes: Gene[] = data.map((row) => ({
+  const genes: Gene[] = data.map((row) => ({
     id: row.id,
     name: row.name,
     owner: row.owner_username || "unknown",
@@ -210,10 +181,9 @@ export async function listGenes(options: {
     updatedAt: row.updated_at,
   }));
 
-  const deduped = deduplicateLatestVersion(allGenes);
-  const paged = deduped.slice(offset, offset + limit);
+  const total = data.length > 0 ? Number(data[0].total_count ?? offset + data.length) : 0;
 
-  return { genes: paged, total: deduped.length, page, per_page: limit, has_more: offset + limit < deduped.length };
+  return { genes, total, page, per_page: limit, has_more: offset + genes.length < total };
 }
 
 function mapGeneRow(row: GeneRow): Gene & { phenotype: Record<string, unknown> } {

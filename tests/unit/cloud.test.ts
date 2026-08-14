@@ -67,24 +67,43 @@ describe("listGenes", () => {
     expect(body.p_domain).toBe("search.web");
   });
 
-  it("always fetches from offset 0 with inflated limit for client-side dedup pagination", async () => {
+  it("passes real server-side pagination parameters", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse([]));
     await listGenes({ page: 3, perPage: 10 });
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.p_offset).toBe(0);
-    expect(body.p_limit).toBe(30);
+    expect(body.p_offset).toBe(20);
+    expect(body.p_limit).toBe(10);
   });
 
-  it("maps RPC response rows to Gene shape", async () => {
+  it("maps RPC response rows to Gene shape and reads the exact total_count", async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse(
-        [{ id: "abc", name: "test", domain: "d", version: "1", fidelity: "Native", description: "desc", wasm_size: 100, downloads: 5, reputation_score: 0.8, created_at: "2026-01-01", updated_at: "2026-01-02", owner_username: "user1" }]
+        [{ id: "abc", name: "test", domain: "d", version: "1", fidelity: "Native", description: "desc", wasm_size: 100, downloads: 5, reputation_score: 0.8, created_at: "2026-01-01", updated_at: "2026-01-02", owner_username: "user1", rank: 0, total_count: 92 }]
       )
     );
     const result = await listGenes({});
     expect(result.genes[0].owner).toBe("user1");
     expect(result.genes[0].name).toBe("test");
-    expect(result.total).toBe(1);
+    expect(result.total).toBe(92);
+    expect(result.has_more).toBe(true);
+  });
+
+  it("reports has_more=false on the final page", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(
+        [{ id: "xyz", name: "last", domain: "d", version: "1", fidelity: "Native", description: "desc", wasm_size: 1, downloads: 0, reputation_score: null, created_at: "2026-01-01", updated_at: "2026-01-02", owner_username: "user1", rank: 0, total_count: 21 }]
+      )
+    );
+    const result = await listGenes({ page: 2, perPage: 20 });
+    expect(result.total).toBe(21);
+    expect(result.has_more).toBe(false);
+  });
+
+  it("returns total 0 for an empty result", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse([]));
+    const result = await listGenes({ page: 9, perPage: 50 });
+    expect(result.total).toBe(0);
+    expect(result.has_more).toBe(false);
   });
 
   it("defaults owner to 'unknown' when owner_username is missing", async () => {
