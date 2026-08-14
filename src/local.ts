@@ -322,7 +322,9 @@ function resolveRotiferBin(): string {
 function rotiferCmd(args: string[], cwd?: string): ShellResult {
   const bin = resolveRotiferBin();
   if (bin === "npx") {
-    return shellExec("npx", ["rotifer", ...args], cwd);
+    // The bare "rotifer" name is unclaimed on npm; invoking it via npx would
+    // execute whatever package squats that name. Always pin the scoped package.
+    return shellExec("npx", ["-y", "@rotifer/playground", ...args], cwd);
   }
   return shellExec(bin, args, cwd);
 }

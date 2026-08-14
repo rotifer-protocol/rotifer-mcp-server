@@ -213,9 +213,24 @@ describe("shell-backed local commands", () => {
     expect(vi.mocked(spawnSync)).toHaveBeenNthCalledWith(
       2,
       "npx",
-      ["rotifer", "agent", "run", "demo-agent", "--input", "hello", "--isVerbose", "--no-sandbox"],
+      ["-y", "@rotifer/playground", "agent", "run", "demo-agent", "--input", "hello", "--isVerbose", "--no-sandbox"],
       expect.objectContaining({ cwd: "/project" }),
     );
+  });
+
+  it("never resolves the fallback through the unclaimed 'rotifer' npm package name", () => {
+    mockSpawnSequence(
+      { status: 1, stdout: "", stderr: "" },
+      { status: 0, stdout: "ok", stderr: "" },
+    );
+
+    runGene({ project_root: "/project", gene_name: "alpha" });
+
+    for (const [command, args] of vi.mocked(spawnSync).mock.calls) {
+      if (command !== "npx") continue;
+      expect((args as string[])[0]).not.toBe("rotifer");
+      expect(args).toContain("@rotifer/playground");
+    }
   });
 
   it("uses the installed rotifer binary when available", () => {
@@ -302,12 +317,12 @@ describe("shell-backed local commands", () => {
 
     const calls = vi.mocked(spawnSync).mock.calls.filter(([command]) => command !== "which");
     expect(calls.map(([command, args]) => [command, args])).toEqual([
-      ["npx", ["rotifer", "run", "alpha", "--input", "demo", "--verbose", "--no-sandbox", "--trust-unsigned"]],
-      ["npx", ["rotifer", "init", "alpha", "--fidelity", "Wrapped", "--domain", "search.web", "--no-genesis"]],
-      ["npx", ["rotifer", "scan", "genes", "--skills", "--skills-path", "skills"]],
-      ["npx", ["rotifer", "wrap", "alpha", "--domain", "search.web", "--fidelity", "Wrapped", "--from-skill", "skill-id", "--from-clawhub", "clawhub-id"]],
-      ["npx", ["rotifer", "test", "alpha", "--verbose", "--compliance"]],
-      ["npx", ["rotifer", "publish", "--all", "--skip-arena", "--description", "desc", "--changelog", "changes", "--skip-security"]],
+      ["npx", ["-y", "@rotifer/playground", "run", "alpha", "--input", "demo", "--verbose", "--no-sandbox", "--trust-unsigned"]],
+      ["npx", ["-y", "@rotifer/playground", "init", "alpha", "--fidelity", "Wrapped", "--domain", "search.web", "--no-genesis"]],
+      ["npx", ["-y", "@rotifer/playground", "scan", "genes", "--skills", "--skills-path", "skills"]],
+      ["npx", ["-y", "@rotifer/playground", "wrap", "alpha", "--domain", "search.web", "--fidelity", "Wrapped", "--from-skill", "skill-id", "--from-clawhub", "clawhub-id"]],
+      ["npx", ["-y", "@rotifer/playground", "test", "alpha", "--verbose", "--compliance"]],
+      ["npx", ["-y", "@rotifer/playground", "publish", "--all", "--skip-arena", "--description", "desc", "--changelog", "changes", "--skip-security"]],
     ]);
   });
 });
