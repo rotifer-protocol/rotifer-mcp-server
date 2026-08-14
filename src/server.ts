@@ -167,7 +167,7 @@ export function createServer(): Server {
       {
         name: "install_gene",
         description:
-          "Install a Gene from the Rotifer Cloud Registry into the local project. Downloads phenotype and metadata. Requires a valid gene_id from search_genes or get_gene_detail.",
+          "Install a Gene from the Rotifer Cloud Registry into the local project. Downloads phenotype, metadata, and the compiled WASM artifact (verified against declared size and sha256) when the gene has one. Requires a valid gene_id from search_genes or get_gene_detail.",
         inputSchema: {
           type: "object" as const,
           additionalProperties: false,

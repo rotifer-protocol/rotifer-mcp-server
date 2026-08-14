@@ -14,6 +14,7 @@ export interface GeneRow {
   phenotype: Record<string, unknown> | null;
   wasm_size: number | null;
   wasm_hash: string | null;
+  wasm_path: string | null;
   content_hash: string | null;
   downloads: number | null;
   reputation_score: number | null;
