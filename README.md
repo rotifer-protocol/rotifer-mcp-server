@@ -230,6 +230,26 @@ ROTIFER_CLOUD_ENDPOINT=https://your-instance.supabase.co
 ROTIFER_CLOUD_ANON_KEY=your-anon-key
 ```
 
+### Usage reporting
+
+When you are **signed in**, each tool call reports a usage record to Rotifer
+Cloud: the tool's name, the Gene id it acted on, whether it succeeded, how long
+it took, and your user id. That is what `get_mcp_stats` reads back. Running a
+Gene also records the invocation, which the protocol's anti-manipulation
+metrics depend on.
+
+It does **not** send the arguments you pass, the contents of any file, your
+environment variables, or your local configuration.
+
+**Signed out, nothing is reported.** To turn it off while signed in:
+
+```bash
+ROTIFER_TELEMETRY=0    # also accepts false / off
+```
+
+Both paths are `logMcpCall` and `logGeneInvocation` in
+[`src/cloud.ts`](src/cloud.ts) — short enough to read in full.
+
 ## Requirements
 
 - Node.js >= 20
