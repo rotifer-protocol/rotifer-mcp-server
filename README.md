@@ -238,11 +238,16 @@ to what a given integration actually needs — useful when the server is attache
 to an assistant that should not be able to publish or log in on your behalf:
 
 ```bash
-ROTIFER_MCP_TOOLS=evolve                        # the rank-and-swap preset (10 tools)
-ROTIFER_MCP_TOOLS=readonly                      # nothing that writes (14 tools)
+npx @rotifer/mcp-server --tools=evolve          # the rank-and-swap preset (10 tools)
+npx @rotifer/mcp-server --tools=readonly        # nothing that writes (14 tools)
 ROTIFER_MCP_TOOLS=search_genes,get_gene_detail  # an exact list
 ROTIFER_MCP_TOOLS=evolve,vg_scan                # a preset plus one
 ```
+
+The flag and the variable do the same thing, and the flag wins if both are set.
+Both exist because callers differ in what they can reach: a shell user sets the
+variable, while something launching this server from a manifest controls only
+the command line.
 
 Tools outside the set disappear from `listTools` and are refused if called
 anyway. The refusal says how to add the tool back and, where one exists, the
