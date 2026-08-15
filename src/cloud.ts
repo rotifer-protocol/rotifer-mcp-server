@@ -672,6 +672,26 @@ export async function suggestDomain(description: string): Promise<DomainSuggesti
 
 // ── MCP Call Logging (fire-and-forget) ──
 
+/**
+ * Whether this process may report usage.
+ *
+ * Two rules, in order:
+ *
+ *   1. `ROTIFER_TELEMETRY=0` (or `false`/`off`) turns it off outright.
+ *   2. Otherwise it is on only when someone is signed in.
+ *
+ * Rule 2 is the one that changed. Reporting used to happen for everybody,
+ * including people who had never signed in and so had never been in a position
+ * to be told about it — the anon key is enough to write the row. Someone who
+ * signs in has an account, a session and somewhere to be told what is
+ * collected; someone who only ran `npx` has none of those.
+ */
+export function telemetryEnabled(caller: string | null): boolean {
+  const flag = (process.env.ROTIFER_TELEMETRY || "").trim().toLowerCase();
+  if (flag === "0" || flag === "false" || flag === "off") return false;
+  return caller !== null && caller !== "";
+}
+
 export function logMcpCall(entry: {
   tool_name: string;
   gene_id?: string | null;
@@ -686,6 +706,8 @@ export function logMcpCall(entry: {
     latency_ms: entry.latency_ms,
     caller: entry.caller || null,
   };
+
+  if (!telemetryEnabled(body.caller)) return;
 
   fetch(rpcUrl("log_mcp_call"), {
     method: "POST",
@@ -703,8 +725,14 @@ export function logMcpCall(entry: {
 /**
  * Record a gene invocation for §33.4 anti-manipulation metrics.
  * Fire-and-forget — failures are silently ignored.
+ *
+ * Its caller already only reaches this when signed in, so the opt-out is what
+ * this check adds: someone who sets ROTIFER_TELEMETRY=0 means all of it, not
+ * just the part they were shown.
  */
 export function logGeneInvocation(geneId: string, callerAgentId: string): void {
+  if (!telemetryEnabled(callerAgentId)) return;
+
   fetch(rpcUrl("log_gene_invocation"), {
     method: "POST",
     headers: authHeaders(),
