@@ -65,12 +65,12 @@ function readJson<T>(path: string): T | null {
   }
 }
 
-function resolveProjectRoot(hint?: string): string {
+export function resolveProjectRoot(hint?: string): string {
   if (hint && existsSync(hint)) return hint;
   return process.cwd();
 }
 
-function resolveGenesDir(root: string): string {
+export function resolveGenesDir(root: string): string {
   const config = readJson<RotiferConfig>(join(root, "rotifer.json"));
   return join(root, config?.genes_dir || "genes");
 }

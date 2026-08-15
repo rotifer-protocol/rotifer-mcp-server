@@ -23,9 +23,9 @@ afterAll(async () => {
 });
 
 describe("listTools", { timeout: 10000 }, () => {
-  it("returns exactly 30 tools", async () => {
+  it("returns exactly 31 tools", async () => {
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(30);
+    expect(tools.length).toBe(31);
   });
 
   it("includes all expected tool names", async () => {
@@ -41,6 +41,7 @@ describe("listTools", { timeout: 10000 }, () => {
     expect(names).toContain("list_local_genes");
     expect(names).toContain("list_local_agents");
     expect(names).toContain("install_gene");
+    expect(names).toContain("rollback_gene");
     expect(names).toContain("arena_submit");
     expect(names).toContain("create_agent");
     expect(names).toContain("agent_run");
@@ -101,5 +102,63 @@ describe("callTool local helpers", { timeout: 10000 }, () => {
     await expect(
       client.callTool({ name: "nonexistent_tool", arguments: {} }),
     ).rejects.toThrow(/Unknown tool/);
+  });
+});
+
+// A declared tool set has to hold at the protocol boundary, not just in the
+// module that parses it: the listing must shrink, and a tool left out must be
+// refused even when a caller names it directly rather than reading the listing.
+describe("declared tool sets", { timeout: 10000 }, () => {
+  async function connect(): Promise<{ client: Client; close: () => Promise<void> }> {
+    const server = createServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    const c = new Client({ name: "test-client", version: "1.0.0" });
+    await c.connect(clientTransport);
+    return { client: c, close: async () => { await c.close(); await server.close(); } };
+  }
+
+  async function withToolSet<T>(declaration: string | undefined, fn: (c: Client) => Promise<T>): Promise<T> {
+    const previous = process.env.ROTIFER_MCP_TOOLS;
+    if (declaration === undefined) delete process.env.ROTIFER_MCP_TOOLS;
+    else process.env.ROTIFER_MCP_TOOLS = declaration;
+    const { client: c, close } = await connect();
+    try {
+      return await fn(c);
+    } finally {
+      await close();
+      if (previous === undefined) delete process.env.ROTIFER_MCP_TOOLS;
+      else process.env.ROTIFER_MCP_TOOLS = previous;
+    }
+  }
+
+  it("lists only the declared preset", async () => {
+    const names = await withToolSet("evolve", async (c) => (await c.listTools()).tools.map((t) => t.name));
+    expect(names.sort()).toEqual([
+      "agent_run", "compare_genes", "create_agent", "get_arena_rankings", "get_gene_detail",
+      "install_gene", "list_local_agents", "list_local_genes", "rollback_gene", "search_genes",
+    ]);
+  });
+
+  it("lists everything when nothing is declared", async () => {
+    const names = await withToolSet(undefined, async (c) => (await c.listTools()).tools.map((t) => t.name));
+    expect(names.length).toBe(31);
+  });
+
+  it("refuses a tool outside the set even when called directly", async () => {
+    const error = await withToolSet("evolve", async (c) =>
+      c.callTool({ name: "publish_gene", arguments: {} }).then(() => null, (e) => e)
+    );
+    expect(error).toBeTruthy();
+    expect(String(error?.message)).toContain("not in this server's declared tool set");
+  });
+
+  it("tells the caller how to get the refused tool back", async () => {
+    const error = await withToolSet("evolve", async (c) =>
+      c.callTool({ name: "publish_gene", arguments: {} }).then(() => null, (e) => e)
+    );
+    const message = String(error?.message);
+    expect(message).toContain("unset ROTIFER_MCP_TOOLS");
+    expect(message).toContain("rotifer publish");
   });
 });
