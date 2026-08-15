@@ -11,9 +11,13 @@
  * names, or both mixed. Unset means every tool, so nothing changes for anyone
  * who does not opt in:
  *
- *   ROTIFER_MCP_TOOLS=evolve                       the preset
- *   ROTIFER_MCP_TOOLS=search_genes,get_gene_detail an exact pair
+ *   --tools=evolve                                 the preset
+ *   --tools=search_genes,get_gene_detail           an exact pair
  *   ROTIFER_MCP_TOOLS=evolve,vg_scan               a preset plus one
+ *
+ * Both spellings exist because callers differ in what they can set: a shell
+ * user reaches for the variable, while a manifest that launches this server
+ * controls argv and nothing else. The flag wins when both are present.
  *
  * A list rather than a fixed profile flag on purpose: rotifer.ai's Web Studio
  * will want a different set than a marketplace Skill, and a Cursor user wants
@@ -83,13 +87,37 @@ const CLI_EQUIVALENT: Record<string, string> = {
 };
 
 /**
+ * Read `--tools=<set>` or `--tools <set>` from a launch command line.
+ *
+ * The environment variable alone is not enough. Callers that launch this server
+ * from a manifest — a ClawHub Skill among them — control the argv and not the
+ * environment: ClawHub's schema has an `env` field, but it declares which
+ * variables a Skill *requires*, with no way to give one a value. A restriction
+ * that the one caller it was built for cannot switch on would be a restriction
+ * in name only.
+ */
+export function toolSetFromArgv(argv: readonly string[] = process.argv.slice(2)): string | undefined {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg.startsWith("--tools=")) return arg.slice("--tools=".length);
+    if (arg === "--tools") return argv[i + 1];
+  }
+  return undefined;
+}
+
+/**
  * Resolve the declared set, or null when every tool is allowed.
+ *
+ * The command line wins over the environment: it is the more specific of the
+ * two, and it is what a manifest can actually set.
  *
  * Unknown names are ignored rather than fatal: a typo should cost you one tool,
  * not the whole server, and a set written for a newer version should still work
  * against an older one.
  */
-export function resolveToolSet(declaration = process.env.ROTIFER_MCP_TOOLS): Set<string> | null {
+export function resolveToolSet(
+  declaration = toolSetFromArgv() ?? process.env.ROTIFER_MCP_TOOLS
+): Set<string> | null {
   const raw = (declaration || "").trim();
   if (!raw) return null;
 
@@ -117,8 +145,8 @@ export function unavailableToolMessage(name: string, allowed: Set<string>): stri
     `Available here: ${[...allowed].sort().join(", ")}.`,
     "",
     "This is a restriction, not a missing feature. To lift it:",
-    `  • add it:        ROTIFER_MCP_TOOLS="$ROTIFER_MCP_TOOLS,${name}"`,
-    "  • or allow all:  unset ROTIFER_MCP_TOOLS",
+    `  • add it:        --tools=<current set>,${name}  (or ROTIFER_MCP_TOOLS)`,
+    "  • or allow all:  drop --tools / unset ROTIFER_MCP_TOOLS",
   ];
   const cli = CLI_EQUIVALENT[name];
   if (cli) {
