@@ -1,3 +1,5 @@
+import { listSnapshots, restoreGene, type RestoreResult, type SnapshotMeta } from "./snapshots.js";
+import { resolveGenesDir, resolveProjectRoot } from "./local.js";
 import {
   listGenes,
   getGene,
@@ -309,6 +311,28 @@ export async function installGeneFromCloud(args: {
   if (!args.gene_id) throw new Error("gene_id is required. Use search_genes to find gene IDs.");
   return installGene(args.gene_id, args.project_root || process.cwd(), args.force);
 }
+
+/**
+ * Undo the last overwrite of a Gene, or say what can be undone.
+ *
+ * Called without a name this lists what is restorable, because the useful
+ * question after an upgrade goes wrong is "what did I replace" and there was
+ * previously no way to ask it.
+ */
+export function rollbackGene(args: {
+  gene_name?: string;
+  project_root?: string;
+}): { restored: RestoreResult | null; available: SnapshotMeta[] } {
+  const genesDir = resolveGenesDirFor(args.project_root);
+  if (!args.gene_name) {
+    return { restored: null, available: listSnapshots(genesDir) };
+  }
+  const restored = restoreGene(genesDir, args.gene_name);
+  return { restored, available: listSnapshots(genesDir) };
+}
+
+const resolveGenesDirFor = (hint?: string): string =>
+  resolveGenesDir(resolveProjectRoot(hint));
 
 export async function compareGenes(args: {
   gene_ids: string[];

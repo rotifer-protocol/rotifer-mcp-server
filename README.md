@@ -89,7 +89,7 @@ AI:  → wrap_gene({ gene_name: "my-search", domain: "search.web", fidelity: "Wr
      → publish_gene({ gene_name: "my-search", changelog: "Initial release" })
 ```
 
-## Tools (30)
+## Tools (31)
 
 ### Discovery & Analytics
 
@@ -125,7 +125,8 @@ AI:  → wrap_gene({ gene_name: "my-search", domain: "search.web", fidelity: "Wr
 | `doctor` | Check the local TypeScript→WASM toolchain (esbuild / javy) and report what is missing — read-only; use when `compile_gene` fails | `project_root` |
 | `run_gene` | Execute a local Gene | `gene_name`, `input`, `verbose`, `no_sandbox`, `trust_unsigned` |
 | `publish_gene` | Publish to Rotifer Cloud | `gene_name`, `all`, `description`, `changelog`, `skip_arena`, `skip_security` |
-| `install_gene` | Install a Gene from Cloud Registry | `gene_id`, `project_root`, `force` |
+| `install_gene` | Install a Gene from Cloud Registry. `force` snapshots the copy it replaces | `gene_id`, `project_root`, `force` |
+| `rollback_gene` | Undo the last overwrite of a local Gene; call with no name to list what can be undone | `gene_name`, `project_root` |
 | `vg_scan` | V(g) security scan — static analysis for Gene/Skill code safety | `path`, `gene_id`, `all`, `project_root` |
 | `arena_submit` | Submit to Arena with 5D fitness scores | `gene_id`, `fitness_value`, `safety_score`, `success_rate`, `latency_score`, `resource_efficiency` |
 
@@ -229,6 +230,41 @@ Or set environment variables:
 ROTIFER_CLOUD_ENDPOINT=https://your-instance.supabase.co
 ROTIFER_CLOUD_ANON_KEY=your-anon-key
 ```
+
+### Choosing which tools to expose
+
+All thirty-one tools are available by default. `ROTIFER_MCP_TOOLS` narrows that
+to what a given integration actually needs — useful when the server is attached
+to an assistant that should not be able to publish or log in on your behalf:
+
+```bash
+ROTIFER_MCP_TOOLS=evolve                        # the rank-and-swap preset (10 tools)
+ROTIFER_MCP_TOOLS=readonly                      # nothing that writes (14 tools)
+ROTIFER_MCP_TOOLS=search_genes,get_gene_detail  # an exact list
+ROTIFER_MCP_TOOLS=evolve,vg_scan                # a preset plus one
+```
+
+Tools outside the set disappear from `listTools` and are refused if called
+anyway. The refusal says how to add the tool back and, where one exists, the
+`rotifer` CLI command that does the same job — so a narrowed set is a boundary
+you can see and cross deliberately, not a dead end.
+
+Leave it unset and nothing changes.
+
+### Undoing an install
+
+`install_gene` with `force` used to overwrite a Gene with no way back. It now
+moves the old copy into `<genes>/.snapshots/` first, and `rollback_gene` puts it
+back:
+
+```
+rollback_gene {}                          → what can be rolled back
+rollback_gene { gene_name: "formatter" }  → restore the copy that was replaced
+```
+
+One snapshot per Gene: the next overwrite of that Gene supersedes it, and a
+rollback consumes it. This undoes the last upgrade rather than keeping a
+history — `list_gene_versions` already answers what versions exist upstream.
 
 ### Usage reporting
 

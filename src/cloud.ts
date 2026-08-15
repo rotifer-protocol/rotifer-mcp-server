@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { loadCredentials } from "./auth.js";
 import { validateGeneName } from "./validate-gene-name.js";
+import { snapshotGene, type SnapshotMeta } from "./snapshots.js";
 import type {
   GeneRow,
   SearchGeneRow,
@@ -807,6 +808,8 @@ export interface InstallResult {
   installedTo: string;
   wasmDownloaded: boolean;
   wasmSize: number | null;
+  /** Set when this install overwrote an existing Gene, which is now restorable. */
+  snapshot: SnapshotMeta | null;
 }
 
 export async function installGene(
@@ -826,10 +829,20 @@ export async function installGene(
     } catch { /* use default */ }
   }
 
-  const geneDir = join(projectRoot, genesDir, gene.name);
+  const genesRoot = join(projectRoot, genesDir);
+  const geneDir = join(genesRoot, gene.name);
 
   if (existsSync(geneDir) && !shouldForce) {
     throw new Error(`Gene '${gene.name}' already exists at ${geneDir}. Use force=true to overwrite.`);
+  }
+
+  // Move the old copy aside before writing over it. This is what makes force
+  // reversible; if it cannot be done, the install does not happen, because an
+  // overwrite the caller believes is undoable and is not would be worse than
+  // no install at all.
+  let snapshot: SnapshotMeta | null = null;
+  if (existsSync(geneDir) && shouldForce) {
+    snapshot = snapshotGene(genesRoot, gene.name, geneId);
   }
 
   mkdirSync(geneDir, { recursive: true });
@@ -900,5 +913,6 @@ export async function installGene(
     installedTo: geneDir,
     wasmDownloaded: didDownloadWasm,
     wasmSize,
+    snapshot,
   };
 }
