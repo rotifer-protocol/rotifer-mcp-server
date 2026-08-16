@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { resolveToolSet, unavailableToolMessage, toolSetFromArgv, PRESETS } from "../../src/tool-sets.js";
+import {
+  resolveToolSet, unavailableToolMessage, toolSetFromArgv, PRESETS,
+  resolveAllowList, allowListFromArgv, blockedEscapeHatches, escapeHatchMessage,
+} from "../../src/tool-sets.js";
 
 describe("resolveToolSet", () => {
   it("returns null when nothing is declared, so every tool stays available", () => {
@@ -157,5 +160,65 @@ describe("flag and environment together", () => {
       if (previous === undefined) delete process.env.ROTIFER_MCP_TOOLS;
       else process.env.ROTIFER_MCP_TOOLS = previous;
     }
+  });
+});
+
+describe("escape hatches", () => {
+  // Narrowing the tool set does not help if a tool inside it can switch off
+  // the sandbox. agent_run is in the evolve preset and takes no_sandbox.
+  it("blocks no_sandbox on agent_run when nothing was declared", () => {
+    expect(blockedEscapeHatches("agent_run", { agent_name: "a", no_sandbox: true }, new Set())).toEqual(["no_sandbox"]);
+  });
+
+  it("blocks both hatches on run_gene", () => {
+    const blocked = blockedEscapeHatches("run_gene", { no_sandbox: true, trust_unsigned: true }, new Set());
+    expect(blocked.sort()).toEqual(["no_sandbox", "trust_unsigned"]);
+  });
+
+  it("allows what was declared", () => {
+    expect(blockedEscapeHatches("agent_run", { no_sandbox: true }, resolveAllowList("no-sandbox"))).toEqual([]);
+  });
+
+  it("accepts the option name as well as the flag spelling", () => {
+    expect(resolveAllowList("no_sandbox").has("no_sandbox")).toBe(true);
+    expect(resolveAllowList("no-sandbox").has("no_sandbox")).toBe(true);
+  });
+
+  it("declaring one hatch does not enable the other", () => {
+    const allowed = resolveAllowList("no-sandbox");
+    expect(blockedEscapeHatches("run_gene", { trust_unsigned: true }, allowed)).toEqual(["trust_unsigned"]);
+  });
+
+  it("does not refuse a call that asks for the safe behaviour", () => {
+    // no_sandbox: false is a request to stay sandboxed. Refusing it would be
+    // absurd, and an `in args` check rather than a truthiness check would.
+    expect(blockedEscapeHatches("agent_run", { no_sandbox: false }, new Set())).toEqual([]);
+    expect(blockedEscapeHatches("agent_run", { agent_name: "a" }, new Set())).toEqual([]);
+    expect(blockedEscapeHatches("agent_run", undefined, new Set())).toEqual([]);
+  });
+
+  it("ignores the option on tools that do not have it", () => {
+    expect(blockedEscapeHatches("search_genes", { no_sandbox: true }, new Set())).toEqual([]);
+  });
+
+  it("ignores an unknown name in the allow list rather than enabling something", () => {
+    expect(resolveAllowList("no-sandbox,nonsense").size).toBe(1);
+    expect(resolveAllowList("").size).toBe(0);
+  });
+
+  it("explains what the option does, how to enable it, and how to do it yourself", () => {
+    const msg = escapeHatchMessage(["no_sandbox"]);
+    expect(msg).toContain("instead of inside the WASM sandbox");
+    expect(msg).toContain("--allow=no-sandbox");
+    expect(msg).toContain("ROTIFER_MCP_ALLOW=no-sandbox");
+    expect(msg).toContain("rotifer agent run");
+    expect(msg).toContain("Retry without it");
+  });
+
+  it("reads --allow from the command line", () => {
+    expect(allowListFromArgv(["--allow=no-sandbox"])).toBe("no-sandbox");
+    expect(allowListFromArgv(["--allow", "no-sandbox"])).toBe("no-sandbox");
+    expect(allowListFromArgv(["--allow-something"])).toBeUndefined();
+    expect(allowListFromArgv([])).toBeUndefined();
   });
 });

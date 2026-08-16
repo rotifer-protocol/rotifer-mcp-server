@@ -256,6 +256,32 @@ you can see and cross deliberately, not a dead end.
 
 Leave it unset and nothing changes.
 
+### Switching off the sandbox
+
+`agent_run` and `run_gene` take `no_sandbox`, and `run_gene` also takes
+`trust_unsigned` — options that run Gene code as plain Node.js instead of inside
+the WASM sandbox. Narrowing the tool set would mean little if a tool inside the
+narrowed set could still do that, so these are refused unless declared at
+launch:
+
+```bash
+npx @rotifer/mcp-server --allow=no-sandbox
+npx @rotifer/mcp-server --allow=no-sandbox,trust-unsigned
+ROTIFER_MCP_ALLOW=no-sandbox                    # same thing
+```
+
+Nothing is removed. The option moves from "any caller can set it" to "someone
+declared it at launch", and you can always do it yourself:
+
+```bash
+rotifer agent run <name> --no-sandbox
+rotifer run <gene> --trust-unsigned
+```
+
+What changes is that an assistant can no longer decide to unsandbox on its own.
+Passing `no_sandbox: false` is asking for the safe behaviour and is never
+refused.
+
 ### Undoing an install
 
 `install_gene` with `force` used to overwrite a Gene with no way back. It now
