@@ -87,6 +87,99 @@ const CLI_EQUIVALENT: Record<string, string> = {
 };
 
 /**
+ * Options that switch off a safety property rather than choose a behaviour.
+ *
+ * Narrowing the tool set is not enough on its own. `agent_run` is in the
+ * `evolve` preset because the Skill runs agents, and it takes `no_sandbox` —
+ * a plain boolean that drops third-party Gene code out of the WASM sandbox and
+ * into plain Node. Ten tools with an escape hatch in one of them is not ten
+ * tools. `run_gene` carries the same option plus `trust_unsigned`, which does
+ * it specifically for code installed from the marketplace.
+ *
+ * These are not removed. They are moved from "any caller can set this" to
+ * "someone declared this at launch", which is the same rule the tool set
+ * follows, and the person at the keyboard can always run the CLI themselves.
+ * What changes is that an assistant can no longer decide to unsandbox on its
+ * own.
+ */
+const ESCAPE_HATCHES: Record<string, { flag: string; tools: string[]; cli: string; what: string }> = {
+  no_sandbox: {
+    flag: "no-sandbox",
+    tools: ["agent_run", "run_gene"],
+    cli: "rotifer agent run <name> --no-sandbox   (or: rotifer run <gene> --no-sandbox)",
+    what: "runs Gene code as plain Node.js instead of inside the WASM sandbox",
+  },
+  trust_unsigned: {
+    flag: "trust-unsigned",
+    tools: ["run_gene"],
+    cli: "rotifer run <gene> --trust-unsigned",
+    what: "allows unsandboxed Node.js execution of Genes installed from the marketplace",
+  },
+};
+
+/** Escape hatches declared at launch, by option name. */
+export function resolveAllowList(
+  declaration = allowListFromArgv() ?? process.env.ROTIFER_MCP_ALLOW
+): Set<string> {
+  const raw = (declaration || "").trim();
+  if (!raw) return new Set();
+
+  const byFlag = new Map(Object.entries(ESCAPE_HATCHES).map(([option, spec]) => [spec.flag, option]));
+  const allowed = new Set<string>();
+  for (const token of raw.split(",").map((t) => t.trim()).filter(Boolean)) {
+    // Accept either spelling — the flag as written on the command line, or the
+    // option name as it appears in the tool schema.
+    const option = byFlag.get(token) ?? (token in ESCAPE_HATCHES ? token : null);
+    if (option) allowed.add(option);
+  }
+  return allowed;
+}
+
+export function allowListFromArgv(argv: readonly string[] = process.argv.slice(2)): string | undefined {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg.startsWith("--allow=")) return arg.slice("--allow=".length);
+    if (arg === "--allow") return argv[i + 1];
+  }
+  return undefined;
+}
+
+/**
+ * Which declared-off escape hatches a call is trying to use.
+ *
+ * Only arguments that are actually truthy count: passing `no_sandbox: false`
+ * is asking for the safe behaviour and must not be refused.
+ */
+export function blockedEscapeHatches(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+  allowed: Set<string>
+): string[] {
+  if (!args) return [];
+  return Object.entries(ESCAPE_HATCHES)
+    .filter(([option, spec]) => spec.tools.includes(toolName) && args[option] === true && !allowed.has(option))
+    .map(([option]) => option);
+}
+
+/** Why an escape hatch is unavailable, and how to get it — same shape as a refused tool. */
+export function escapeHatchMessage(options: string[]): string {
+  const lines: string[] = [];
+  for (const option of options) {
+    const spec = ESCAPE_HATCHES[option];
+    lines.push(
+      `'${option}' is not enabled on this server. It ${spec.what}.`,
+      "",
+      "This is a restriction, not a missing feature. To enable it:",
+      `  • at launch:         --allow=${spec.flag}  (or ROTIFER_MCP_ALLOW=${spec.flag})`,
+      `  • or run it yourself: ${spec.cli}`,
+      ""
+    );
+  }
+  lines.push("Retry without it to run inside the sandbox.");
+  return lines.join("\n");
+}
+
+/**
  * Read `--tools=<set>` or `--tools <set>` from a launch command line.
  *
  * The environment variable alone is not enough. Callers that launch this server

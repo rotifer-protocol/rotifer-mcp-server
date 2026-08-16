@@ -162,3 +162,58 @@ describe("declared tool sets", { timeout: 10000 }, () => {
     expect(message).toContain("rotifer publish");
   });
 });
+
+// The escape-hatch gate has to hold where it matters: at the call, not just in
+// the module that decides. agent_run is inside the evolve preset, so a narrowed
+// tool set that still let it unsandbox would not be narrowed at all.
+describe("escape hatches at the protocol boundary", { timeout: 10000 }, () => {
+  async function callWith(env: Record<string, string | undefined>, params: { name: string; arguments: Record<string, unknown> }) {
+    const previous: Record<string, string | undefined> = {};
+    for (const [k, v] of Object.entries(env)) {
+      previous[k] = process.env[k];
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    const server = createServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    const c = new Client({ name: "test-client", version: "1.0.0" });
+    await c.connect(clientTransport);
+    try {
+      return await c.callTool(params).then(() => null, (e) => e);
+    } finally {
+      await c.close();
+      await server.close();
+      for (const [k, v] of Object.entries(previous)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  }
+
+  it("refuses no_sandbox when it was not declared", async () => {
+    const error = await callWith(
+      { ROTIFER_MCP_ALLOW: undefined },
+      { name: "agent_run", arguments: { agent_name: "whatever", no_sandbox: true } }
+    );
+    expect(String(error?.message)).toContain("'no_sandbox' is not enabled on this server");
+  });
+
+  it("tells the caller how to enable it and how to do it without the server", async () => {
+    const error = await callWith(
+      { ROTIFER_MCP_ALLOW: undefined },
+      { name: "agent_run", arguments: { agent_name: "whatever", no_sandbox: true } }
+    );
+    const message = String(error?.message);
+    expect(message).toContain("--allow=no-sandbox");
+    expect(message).toContain("rotifer agent run");
+  });
+
+  it("refuses it inside the evolve set too, which is the case that matters", async () => {
+    const error = await callWith(
+      { ROTIFER_MCP_TOOLS: "evolve", ROTIFER_MCP_ALLOW: undefined },
+      { name: "agent_run", arguments: { agent_name: "whatever", no_sandbox: true } }
+    );
+    expect(String(error?.message)).toContain("not enabled on this server");
+  });
+});
