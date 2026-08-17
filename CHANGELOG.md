@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.15.0...v0.15.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* the telemetry opt-out has to cover the install counter too ([#110](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/110)) ([5c75fd9](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/5c75fd9c4a5ecfdca249e45c4d6b97c8b1477753))
+
 ## [0.15.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.14.0...v0.15.0) (2026-08-16)
 
 
