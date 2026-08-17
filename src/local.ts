@@ -75,6 +75,30 @@ export function resolveGenesDir(root: string): string {
   return join(root, config?.genes_dir || "genes");
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The Cloud id of a local Gene, or null when it has none.
+ *
+ * `run_gene` and `compile_gene` take a *directory name*, not an id. Until
+ * this existed the server reported that name to Cloud as if it were the Gene's
+ * id — `log_gene_invocation(p_gene_id uuid, …)` rejected every call, the
+ * fire-and-forget swallowed the 400, and the anti-manipulation metrics that
+ * depend on invocation counts stayed at zero from the day they shipped
+ * (ADR-319 D0). Only Genes installed from Cloud carry a manifest with the real
+ * id; a locally-authored Gene has nothing to report against, so null is the
+ * honest answer rather than a name that will be rejected downstream.
+ */
+export function resolveLocalGeneCloudId(geneName: string, projectRoot?: string): string | null {
+  if (!geneName || geneName.includes("/") || geneName.includes("\\") || geneName.startsWith(".")) {
+    return null;
+  }
+  const geneDir = join(resolveGenesDir(resolveProjectRoot(projectRoot)), geneName);
+  const cloud = readJson<CloudManifest>(join(geneDir, ".cloud-manifest.json"));
+  const id = cloud?.cloud_id;
+  return typeof id === "string" && UUID_RE.test(id) ? id : null;
+}
+
 export function listLocalGenes(options: {
   project_root?: string;
   domain?: string;
