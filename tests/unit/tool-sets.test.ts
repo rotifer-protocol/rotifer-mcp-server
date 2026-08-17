@@ -222,3 +222,52 @@ describe("escape hatches", () => {
     expect(allowListFromArgv([])).toBeUndefined();
   });
 });
+
+describe("resources travel with their tools", () => {
+  it("maps each resource URI to the tool that does its job", async () => {
+    const { resourceTool } = await import("../../src/tool-sets.js");
+
+    expect(resourceTool("rotifer://genes/abc/stats")).toBe("get_gene_stats");
+    expect(resourceTool("rotifer://genes/abc")).toBe("get_gene_detail");
+    expect(resourceTool("rotifer://developers/someone")).toBe("get_developer_profile");
+    expect(resourceTool("rotifer://leaderboard")).toBe("get_leaderboard");
+    expect(resourceTool("rotifer://local/genes")).toBe("list_local_genes");
+  });
+
+  it("maps version to no tool, because describing itself is not a capability", async () => {
+    const { resourceTool, resourceAllowed } = await import("../../src/tool-sets.js");
+
+    expect(resourceTool("rotifer://version")).toBeNull();
+    expect(resourceAllowed("rotifer://version", new Set(["search_genes"]))).toBe(true);
+  });
+
+  it("does not confuse a Gene's detail URI with its stats URI", async () => {
+    const { resourceTool } = await import("../../src/tool-sets.js");
+
+    // The detail pattern must not swallow the stats path, or narrowing the set
+    // would leave statistics readable under the wrong name.
+    expect(resourceTool("rotifer://genes/abc/stats")).not.toBe("get_gene_detail");
+  });
+
+  it("allows everything when no set is declared", async () => {
+    const { resourceAllowed, resourceTemplateAllowed } = await import("../../src/tool-sets.js");
+
+    expect(resourceAllowed("rotifer://developers/someone", null)).toBe(true);
+    expect(resourceTemplateAllowed("rotifer://leaderboard", null)).toBe(true);
+  });
+
+  it("lets an unrecognised URI through so the handler can say it is unknown", async () => {
+    const { resourceAllowed } = await import("../../src/tool-sets.js");
+
+    expect(resourceAllowed("rotifer://nonsense", new Set(["search_genes"]))).toBe(true);
+  });
+
+  it("says which tool a refused resource belongs to, and how to ask for it", async () => {
+    const { unavailableResourceMessage } = await import("../../src/tool-sets.js");
+    const message = unavailableResourceMessage("rotifer://genes/abc/stats", new Set(["search_genes"]));
+
+    expect(message).toContain("get_gene_stats");
+    expect(message).toContain("--tools=");
+    expect(message).toContain("rotifer stats");
+  });
+});

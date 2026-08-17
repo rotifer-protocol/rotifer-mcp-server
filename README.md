@@ -161,6 +161,14 @@ MCP Resources let AI clients reference Rotifer data as context:
 | `rotifer://local/agents` | Local Agent registry |
 | `rotifer://version` | MCP Server version and update availability |
 
+Each resource returns what the tool of the same job returns, so a declared tool
+set covers both: with `--tools=evolve`, `rotifer://genes/{gene_id}/stats`,
+`rotifer://developers/{username}` and `rotifer://leaderboard` disappear from the
+listing and are refused if read directly, because `get_gene_stats`,
+`get_developer_profile` and `get_leaderboard` were not asked for.
+`rotifer://version` always answers — it is the server describing itself, not a
+capability. Before 0.16.0 these were reachable whatever the tool set said.
+
 ## Prompts (4)
 
 MCP Prompts give AI clients guided workflows for common tasks:
@@ -248,6 +256,12 @@ The flag and the variable do the same thing, and the flag wins if both are set.
 Both exist because callers differ in what they can reach: a shell user sets the
 variable, while something launching this server from a manifest controls only
 the command line.
+
+A declared set covers the whole surface, not just `tools/list`. Tools outside it
+are refused when called by name; [resources](#resources-7) that duplicate an
+excluded tool are dropped from the listing and refused when read; and the
+sandbox escape hatches below stay off unless separately declared. A restriction
+with an unlisted way around it is not a restriction.
 
 Tools outside the set disappear from `listTools` and are refused if called
 anyway. The refusal says how to add the tool back and, where one exists, the

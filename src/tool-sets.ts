@@ -87,6 +87,76 @@ const CLI_EQUIVALENT: Record<string, string> = {
 };
 
 /**
+ * Resources are a second read surface, and a declared tool set has to cover it.
+ *
+ * Tools are not the only thing this server offers. It also serves resources —
+ * `rotifer://genes/{id}/stats`, `rotifer://developers/{name}` and the rest —
+ * which return the same data as tools of the same name, through a different
+ * request type. Narrowing the tools while leaving those open means a caller
+ * that asked for ten things still reaches `get_gene_stats`,
+ * `get_developer_profile` and `get_leaderboard` by spelling them as URIs. The
+ * declaration would again be narrower than the surface, which is the whole
+ * defect this module exists to fix — third time in the same shape, after the
+ * tool list itself and the sandbox escape hatches.
+ *
+ * Each resource is mapped to the tool that does its job, and travels with it.
+ * `rotifer://version` maps to nothing: it is the server describing itself, like
+ * `tools/list`, and answering "which version am I" is not a capability anyone
+ * declares.
+ *
+ * Prompts are deliberately not gated. A prompt returns text and reaches
+ * nothing — no query, no file, no process — so restricting one would remove no
+ * authority. If a prompt ever does more than return text, it belongs here.
+ */
+const RESOURCE_TOOLS: Array<{ template: string; pattern: RegExp; tool: string | null }> = [
+  { template: "rotifer://genes/{gene_id}/stats", pattern: /^rotifer:\/\/genes\/[^/]+\/stats$/, tool: "get_gene_stats" },
+  { template: "rotifer://developers/{username}", pattern: /^rotifer:\/\/developers\/[^/]+$/, tool: "get_developer_profile" },
+  { template: "rotifer://genes/{gene_id}", pattern: /^rotifer:\/\/genes\/[^/]+$/, tool: "get_gene_detail" },
+  { template: "rotifer://leaderboard", pattern: /^rotifer:\/\/leaderboard$/, tool: "get_leaderboard" },
+  { template: "rotifer://local/genes", pattern: /^rotifer:\/\/local\/genes$/, tool: "list_local_genes" },
+  { template: "rotifer://local/agents", pattern: /^rotifer:\/\/local\/agents$/, tool: "list_local_agents" },
+  { template: "rotifer://version", pattern: /^rotifer:\/\/version$/, tool: null },
+];
+
+/** The tool a concrete resource URI is equivalent to, or null when it needs none. */
+export function resourceTool(uri: string): string | null {
+  return RESOURCE_TOOLS.find((r) => r.pattern.test(uri))?.tool ?? null;
+}
+
+/**
+ * Whether a resource may be listed or read under the declared set.
+ *
+ * An unrecognised URI is allowed through so the handler can answer with its own
+ * "unknown resource" error, which says something more useful than this would.
+ */
+export function resourceAllowed(uri: string, allowed: Set<string> | null): boolean {
+  if (!allowed) return true;
+  const tool = resourceTool(uri);
+  return tool === null || allowed.has(tool);
+}
+
+/** Same question for an entry in the template list, which is matched by name. */
+export function resourceTemplateAllowed(template: string, allowed: Set<string> | null): boolean {
+  if (!allowed) return true;
+  const entry = RESOURCE_TOOLS.find((r) => r.template === template);
+  return !entry || entry.tool === null || allowed.has(entry.tool);
+}
+
+/** Why a resource is unavailable, and how to get it — same shape as a refused tool. */
+export function unavailableResourceMessage(uri: string, allowed: Set<string>): string {
+  const tool = resourceTool(uri);
+  return [
+    `Resource '${uri}' is not in this server's declared tool set.`,
+    `It returns what '${tool}' returns, and '${tool}' was not asked for.`,
+    "",
+    "This is a restriction, not a missing feature. To lift it:",
+    `  • add it:        --tools=<current set>,${tool}  (or ROTIFER_MCP_TOOLS)`,
+    "  • or allow all:  drop --tools / unset ROTIFER_MCP_TOOLS",
+    ...(tool && CLI_EQUIVALENT[tool] ? [`  • or run it yourself:  ${CLI_EQUIVALENT[tool]}`] : []),
+  ].join("\n");
+}
+
+/**
  * Options that switch off a safety property rather than choose a behaviour.
  *
  * Narrowing the tool set is not enough on its own. `agent_run` is in the
