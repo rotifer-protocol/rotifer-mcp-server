@@ -8,7 +8,7 @@ vi.mock("node:fs", () => ({
 }));
 
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
-import { listLocalGenes } from "../../src/local.js";
+import { listLocalGenes, resolveLocalGeneCloudId } from "../../src/local.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -181,5 +181,53 @@ describe("listLocalGenes", () => {
     const result = listLocalGenes({ project_root: "/project", domain: "code", fidelity: "Native" });
     expect(result.total).toBe(1);
     expect(result.genes[0].name).toBe("a");
+  });
+});
+
+// run_gene / compile_gene address a Gene by directory name. Before this
+// resolver existed the server sent that name to Cloud as the Gene id, and
+// log_gene_invocation(uuid, …) rejected every one of them — the anti-
+// manipulation metrics fed by invocations stayed at zero from day one
+// (ADR-319 D0). The resolver returns the manifest's Cloud id, or nothing.
+describe("resolveLocalGeneCloudId", () => {
+  const CLOUD_ID = "250243be-4f02-4a29-8d8a-fe8bc3609c76";
+
+  it("returns the Cloud id from .cloud-manifest.json", () => {
+    setupMockFs({
+      "evolve-life": {
+        phenotype: { domain: "evolve.life", fidelity: "Native" },
+        cloud: { cloud_id: CLOUD_ID, owner: "rotifer-protocol", version: "0.2.0" },
+      },
+    });
+    expect(resolveLocalGeneCloudId("evolve-life", "/project")).toBe(CLOUD_ID);
+  });
+
+  it("returns null for a locally-authored Gene with no manifest — never the name", () => {
+    setupMockFs({
+      "my-local-gene": { phenotype: { domain: "test", fidelity: "Wrapped" } },
+    });
+    expect(resolveLocalGeneCloudId("my-local-gene", "/project")).toBeNull();
+  });
+
+  it("returns null when the manifest id is not a uuid", () => {
+    setupMockFs({
+      "odd": {
+        phenotype: { domain: "test", fidelity: "Wrapped" },
+        cloud: { cloud_id: "odd", owner: "x", version: "0.1.0" },
+      },
+    });
+    expect(resolveLocalGeneCloudId("odd", "/project")).toBeNull();
+  });
+
+  it("returns null for an unknown Gene", () => {
+    setupMockFs({});
+    expect(resolveLocalGeneCloudId("nope", "/project")).toBeNull();
+  });
+
+  it("refuses names that could escape the genes directory", () => {
+    setupMockFs({});
+    expect(resolveLocalGeneCloudId("../etc", "/project")).toBeNull();
+    expect(resolveLocalGeneCloudId(".hidden", "/project")).toBeNull();
+    expect(resolveLocalGeneCloudId("", "/project")).toBeNull();
   });
 });

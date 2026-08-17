@@ -12,6 +12,7 @@ import {
 import { searchGenes, getGeneDetail, arenaRankings, compareGenes, geneStats, leaderboard, developerProfile, listLocalGenes, listLocalAgents, submitToArena, installGeneFromCloud, rollbackGene, createLocalAgent, agentRun, compileGene, runGene, initGene, scanGenes, wrapGene, testGene, publishGene, authStatus, login, logout, geneVersions, mcpStats, geneReputation, myReputation, domainSuggestion, vgScan, doctor } from "./tools.js";
 import { getGeneStatsRpc, getReputationLeaderboard, getDeveloperProfile, getGene, logMcpCall, logGeneInvocation } from "./cloud.js";
 import { loadCredentials } from "./auth.js";
+import { resolveLocalGeneCloudId } from "./local.js";
 import { resolveToolSet, unavailableToolMessage, resolveAllowList, blockedEscapeHatches, escapeHatchMessage, resourceAllowed, resourceTemplateAllowed, unavailableResourceMessage } from "./tool-sets.js";
 import { getPackageVersion, getVersionInfo, formatUpdateHint, type VersionInfo } from "./version.js";
 
@@ -546,15 +547,29 @@ export function createServer(): Server {
   }));
 
 
+  // Tools that address a Gene by its Cloud id.
   const GENE_ID_TOOLS = new Set([
     "get_gene_detail", "get_gene_stats", "install_gene",
-    "arena_submit", "compare_genes", "run_gene", "compile_gene",
-    "get_gene_reputation",
+    "arena_submit", "compare_genes", "get_gene_reputation",
   ]);
+  // Tools that address a Gene by its local directory name. The name is not an
+  // id and must never be reported as one: `log_gene_invocation` takes a uuid
+  // and rejected every name we sent it, so invocation counts — the input to
+  // the §33.4 anti-manipulation gate — never left zero (ADR-319 D0). Resolve
+  // through the Gene's Cloud manifest instead, and report nothing when there is
+  // no Cloud identity to report against.
+  const GENE_NAME_TOOLS = new Set(["run_gene", "compile_gene"]);
 
   function extractGeneId(toolName: string, args: Record<string, unknown>): string | null {
-    if (!GENE_ID_TOOLS.has(toolName)) return null;
-    return (args.gene_id || args.gene_name || null) as string | null;
+    if (GENE_ID_TOOLS.has(toolName)) {
+      return typeof args.gene_id === "string" && args.gene_id ? args.gene_id : null;
+    }
+    if (GENE_NAME_TOOLS.has(toolName)) {
+      const name = typeof args.gene_name === "string" ? args.gene_name : "";
+      const root = typeof args.project_root === "string" ? args.project_root : undefined;
+      return name ? resolveLocalGeneCloudId(name, root) : null;
+    }
+    return null;
   }
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -663,18 +678,18 @@ export function createServer(): Server {
       }
 
       const callerId = loadCredentials()?.user?.id ?? null;
+      const geneId = extractGeneId(name, (args || {}) as Record<string, unknown>);
 
       logMcpCall({
         tool_name: name,
-        gene_id: extractGeneId(name, (args || {}) as Record<string, unknown>),
+        gene_id: geneId,
         success: true,
         latency_ms: Date.now() - startMs,
         caller: callerId,
       });
 
-      if (name === "run_gene" && callerId) {
-        const geneId = extractGeneId(name, (args || {}) as Record<string, unknown>);
-        if (geneId) logGeneInvocation(geneId, callerId);
+      if (name === "run_gene" && callerId && geneId) {
+        logGeneInvocation(geneId, callerId);
       }
 
       const content: Array<{ type: "text"; text: string }> = [
