@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.1](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.16.0...v0.16.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* report a Gene's Cloud id on run_gene, not its directory name ([#114](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/114)) ([8fa714d](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/8fa714df80d6db59ec034569ae52f167c284658b))
+
 ## [0.16.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.15.1...v0.16.0) (2026-08-17)
 
 
