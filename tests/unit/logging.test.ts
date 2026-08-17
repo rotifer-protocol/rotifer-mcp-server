@@ -217,3 +217,42 @@ describe("MCP tool call logging integration", () => {
     expect(server).toBeDefined();
   });
 });
+
+/**
+ * The two gates are deliberately different. `telemetryEnabled` also requires a
+ * signed-in caller, because a usage record is about a person. The install
+ * counter is not about a person, so it asks only whether reporting was switched
+ * off — which is why the split exists at all.
+ */
+describe("telemetryOptedOut vs telemetryEnabled", () => {
+  const originalFlag = process.env.ROTIFER_TELEMETRY;
+
+  afterEach(() => {
+    if (originalFlag === undefined) delete process.env.ROTIFER_TELEMETRY;
+    else process.env.ROTIFER_TELEMETRY = originalFlag;
+  });
+
+  it("treats being signed out as no usage reporting, but not as an opt-out", async () => {
+    delete process.env.ROTIFER_TELEMETRY;
+    const { telemetryOptedOut, telemetryEnabled } = await import("../../src/cloud.js");
+
+    expect(telemetryEnabled(null)).toBe(false);
+    expect(telemetryOptedOut()).toBe(false);
+  });
+
+  it.each(["0", "false", "off", "OFF", " 0 "])("treats %s as an opt-out for both", async (flag) => {
+    process.env.ROTIFER_TELEMETRY = flag;
+    const { telemetryOptedOut, telemetryEnabled } = await import("../../src/cloud.js");
+
+    expect(telemetryOptedOut()).toBe(true);
+    expect(telemetryEnabled(SIGNED_IN)).toBe(false);
+  });
+
+  it("treats any other value as no opt-out", async () => {
+    process.env.ROTIFER_TELEMETRY = "1";
+    const { telemetryOptedOut, telemetryEnabled } = await import("../../src/cloud.js");
+
+    expect(telemetryOptedOut()).toBe(false);
+    expect(telemetryEnabled(SIGNED_IN)).toBe(true);
+  });
+});

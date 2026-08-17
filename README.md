@@ -308,14 +308,24 @@ metrics depend on.
 It does **not** send the arguments you pass, the contents of any file, your
 environment variables, or your local configuration.
 
-**Signed out, nothing is reported.** To turn it off while signed in:
+**Signed out, no usage record is sent.** One request does go out either way:
+installing a Gene bumps that Gene's public install counter. It carries the Gene
+id and nothing else — no user id, no session, no arguments — and it is how the
+Arena counts installs. Until 0.15.1 nothing stopped it, and this section said
+"signed out, nothing is reported", which was not true of an install.
+
+`ROTIFER_TELEMETRY=0` now stops all three:
 
 ```bash
 ROTIFER_TELEMETRY=0    # also accepts false / off
 ```
 
-Both paths are `logMcpCall` and `logGeneInvocation` in
-[`src/cloud.ts`](src/cloud.ts) — short enough to read in full.
+The three are `logMcpCall`, `logGeneInvocation` and the `track_download` call
+inside `installGene`, all in [`src/cloud.ts`](src/cloud.ts) — short enough to
+read in full. Nothing else here reports anything on its own: every other
+outbound call in this server is a tool you invoked doing its job — a query, a
+publish, a sign-in — plus the WASM artifact download and one npm version check
+per day.
 
 ## Requirements
 
