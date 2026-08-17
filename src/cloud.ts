@@ -688,9 +688,23 @@ export async function suggestDomain(description: string): Promise<DomainSuggesti
  * collected; someone who only ran `npx` has none of those.
  */
 export function telemetryEnabled(caller: string | null): boolean {
-  const flag = (process.env.ROTIFER_TELEMETRY || "").trim().toLowerCase();
-  if (flag === "0" || flag === "false" || flag === "off") return false;
+  if (telemetryOptedOut()) return false;
   return caller !== null && caller !== "";
+}
+
+/**
+ * Whether the user has switched reporting off, on its own.
+ *
+ * Split out from `telemetryEnabled` because not everything this server sends
+ * is about a signed-in user: the install counter below carries a Gene id and no
+ * identity, so signing in is not what makes it fire. The opt-out still has to
+ * cover it. It is documented without qualification — "set this and nothing is
+ * reported" — and an opt-out that leaves one request behind is the same defect
+ * as no opt-out at all, only harder to notice.
+ */
+export function telemetryOptedOut(): boolean {
+  const flag = (process.env.ROTIFER_TELEMETRY || "").trim().toLowerCase();
+  return flag === "0" || flag === "false" || flag === "off";
 }
 
 export function logMcpCall(entry: {
@@ -896,14 +910,21 @@ export async function installGene(
     ) + "\n"
   );
 
-  // Track download
-  try {
-    await fetch(rpcUrl("track_download"), {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ p_gene_id: geneId }),
-    });
-  } catch { /* non-fatal */ }
+  // Bump the Gene's public install counter. Unlike the usage records above,
+  // this carries no identity — a Gene id and the public anon key — so being
+  // signed in is not what turns it on, and it has always fired for everyone.
+  // That was never written down, which made "signed out, nothing is reported"
+  // false for anyone who installed something. Both halves are fixed: the
+  // sentence now says what this is, and the documented opt-out stops it.
+  if (!telemetryOptedOut()) {
+    try {
+      await fetch(rpcUrl("track_download"), {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ p_gene_id: geneId }),
+      });
+    } catch { /* non-fatal */ }
+  }
 
   return {
     geneId: gene.id,

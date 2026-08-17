@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createHash } from "node:crypto";
 
 vi.mock("node:fs", () => ({
@@ -150,5 +150,64 @@ describe("installGene WASM download", () => {
     expect(result.wasmDownloaded).toBe(false);
     expect(wasmWrites()).toHaveLength(0);
     expect(manifestWrites()).toHaveLength(1);
+  });
+});
+
+/**
+ * The install counter fires whether or not you are signed in — it carries a
+ * Gene id and no identity, so signing in is not what turns it on. That was
+ * never disclosed, which made "signed out, nothing is reported" false for
+ * anyone who installed something. These tests hold both halves of the fix:
+ * it still counts installs, and the documented opt-out actually stops it.
+ */
+describe("installGene download counter", () => {
+  const originalFlag = process.env.ROTIFER_TELEMETRY;
+
+  afterEach(() => {
+    if (originalFlag === undefined) delete process.env.ROTIFER_TELEMETRY;
+    else process.env.ROTIFER_TELEMETRY = originalFlag;
+  });
+
+  function counterCalls() {
+    return mockFetch.mock.calls.filter(([url]) => String(url).includes("/rpc/track_download"));
+  }
+
+  async function installWithoutWasm() {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse([geneRow({ wasm_path: null, wasm_hash: null, wasm_size: 0 })]))
+      .mockResolvedValueOnce(jsonResponse({}));
+    return installGene(GENE_ID, "/project");
+  }
+
+  it("counts the install when signed out, carrying the Gene id and no identity", async () => {
+    delete process.env.ROTIFER_TELEMETRY;
+
+    await installWithoutWasm();
+
+    expect(counterCalls()).toHaveLength(1);
+    const [, opts] = counterCalls()[0];
+    expect(JSON.parse(String(opts.body))).toEqual({ p_gene_id: GENE_ID });
+    expect(opts.headers).not.toHaveProperty("Authorization");
+  });
+
+  it.each(["0", "false", "off", "OFF", " 0 "])(
+    "sends nothing when ROTIFER_TELEMETRY=%s, and still installs",
+    async (flag) => {
+      process.env.ROTIFER_TELEMETRY = flag;
+
+      const result = await installWithoutWasm();
+
+      expect(counterCalls()).toHaveLength(0);
+      expect(result.name).toBe("demo-gene");
+      expect(manifestWrites()).toHaveLength(1);
+    },
+  );
+
+  it("still counts when ROTIFER_TELEMETRY holds something that is not an opt-out", async () => {
+    process.env.ROTIFER_TELEMETRY = "1";
+
+    await installWithoutWasm();
+
+    expect(counterCalls()).toHaveLength(1);
   });
 });
