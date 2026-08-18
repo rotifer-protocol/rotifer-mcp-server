@@ -1,5 +1,5 @@
 import { listSnapshots, restoreGene, type RestoreResult, type SnapshotMeta } from "./snapshots.js";
-import { resolveGenesDir, resolveProjectRoot } from "./local.js";
+import { resolveGenesDir, resolveProjectRoot, arenaSubmit, type ShellResult } from "./local.js";
 import {
   listGenes,
   getGene,
@@ -8,7 +8,6 @@ import {
   getGeneStatsRpc,
   getReputationLeaderboard,
   getDeveloperProfile,
-  arenaSubmitCloud,
   installGene,
   listGeneVersions as listGeneVersionsCloud,
   getMcpStats as getMcpStatsCloud,
@@ -22,7 +21,6 @@ import {
   type GeneStats,
   type LeaderboardEntry,
   type DeveloperProfile,
-  type ArenaSubmitResult,
   type InstallResult,
   type GeneVersionEntry,
   type McpStatsResult,
@@ -277,30 +275,57 @@ export function logout(): LogoutResult {
   return { success: true, message: `Logged out (was: ${existing.user.username} via ${existing.provider}).` };
 }
 
-function validateScore(name: string, value: unknown): number {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0 || n > 1) {
-    throw new Error(`${name} must be a number between 0 and 1, got: ${value}`);
-  }
-  return n;
-}
+/**
+ * Scores this tool used to accept from its caller. It no longer does — but a
+ * caller holding an older tool description will still send them, and a bare
+ * schema rejection would not tell it why. Named here so the refusal can.
+ */
+const CALLER_SUPPLIED_SCORES = [
+  "fitness_value",
+  "safety_score",
+  "success_rate",
+  "latency_score",
+  "resource_efficiency",
+] as const;
 
-export async function submitToArena(args: {
-  gene_id: string;
-  fitness_value: number;
-  safety_score: number;
-  success_rate: number;
-  latency_score: number;
-  resource_efficiency: number;
-}): Promise<ArenaSubmitResult> {
-  if (!args.gene_id) throw new Error("gene_id is required. Use search_genes to find gene IDs.");
-  return arenaSubmitCloud(args.gene_id, {
-    value: validateScore("fitness_value", args.fitness_value),
-    safety_score: validateScore("safety_score", args.safety_score),
-    success_rate: validateScore("success_rate", args.success_rate),
-    latency_score: validateScore("latency_score", args.latency_score),
-    resource_efficiency: validateScore("resource_efficiency", args.resource_efficiency),
-  });
+/**
+ * Measure a local Gene and submit the measurement to the Arena.
+ *
+ * Until now this took five numbers from whoever called it and posted them as
+ * fitness. Nothing ran; an assistant could name any score it liked and the
+ * leaderboard would carry it (ADR-319 D3). The numbers now come from running
+ * the Gene, which is why this takes a `gene_name` and not a `gene_id`: a score
+ * can only be produced for a Gene that is here to be run.
+ */
+export function submitToArena(args: {
+  gene_name?: string;
+  project_root?: string;
+  [key: string]: unknown;
+}): ShellResult {
+  const declared = CALLER_SUPPLIED_SCORES.filter((f) => args[f] !== undefined);
+  if (declared.length > 0) {
+    throw new Error(
+      `arena_submit no longer accepts scores from the caller (received: ${declared.join(", ")}). ` +
+        "A fitness score is a measurement, not a claim: it is now produced by running the Gene in " +
+        "the sandbox, and the per-run evidence behind it is published alongside the score so anyone " +
+        "can recompute it. Call arena_submit with { gene_name } instead — list_local_genes shows " +
+        "what is available locally, install_gene fetches one that is not."
+    );
+  }
+
+  if (!args.gene_name) {
+    if (typeof args.gene_id === "string" && args.gene_id) {
+      throw new Error(
+        "arena_submit takes gene_name, not gene_id. The score comes from running the Gene, so it can " +
+          "only be produced for one that exists locally: run install_gene with that gene_id first, then " +
+          "call arena_submit with the name it was installed under."
+      );
+    }
+    throw new Error("gene_name is required. Use list_local_genes to see locally installed Genes.");
+  }
+
+  validateGeneName(args.gene_name);
+  return arenaSubmit({ gene_name: args.gene_name, project_root: args.project_root });
 }
 
 export async function installGeneFromCloud(args: {

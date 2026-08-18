@@ -128,7 +128,7 @@ AI:  → wrap_gene({ gene_name: "my-search", domain: "search.web", fidelity: "Wr
 | `install_gene` | Install a Gene from Cloud Registry. `force` snapshots the copy it replaces | `gene_id`, `project_root`, `force` |
 | `rollback_gene` | Undo the last overwrite of a local Gene; call with no name to list what can be undone | `gene_name`, `project_root` |
 | `vg_scan` | V(g) security scan — static analysis for Gene/Skill code safety | `path`, `gene_id`, `all`, `project_root` |
-| `arena_submit` | Submit to Arena with 5D fitness scores | `gene_id`, `fitness_value`, `safety_score`, `success_rate`, `latency_score`, `resource_efficiency` |
+| `arena_submit` | Measure a local Gene in the sandbox and submit the measurement to the Arena. Scores are produced by running the Gene, never supplied by the caller | `gene_name`, `project_root` |
 
 ### Agent Composition
 

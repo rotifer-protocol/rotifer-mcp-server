@@ -36,7 +36,6 @@ const {
   getGeneStatsRpc,
   getReputationLeaderboard,
   getDeveloperProfile,
-  arenaSubmitCloud,
 } = await import("../../src/cloud.js");
 
 beforeEach(() => {
@@ -240,71 +239,5 @@ describe("getDeveloperProfile", () => {
     );
     const profile = await getDeveloperProfile("dev");
     expect(profile.reputation).toBeNull();
-  });
-});
-
-describe("arenaSubmitCloud", () => {
-  it("fetches gene detail then POSTs to arena_entries", async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse([{
-        id: "gene-1", name: "test", domain: "d", version: "1", fidelity: "Native",
-        description: "desc", phenotype: {}, wasm_size: 100, downloads: 5,
-        reputation_score: null, created_at: "2026-01-01", updated_at: "2026-01-02",
-        published: true, owner_id: "u1",
-        profiles: { username: "owner1" },
-      }])
-    );
-    mockFetch.mockResolvedValueOnce(
-      mockResponse([{
-        gene_id: "gene-1", domain: "d", fitness_value: 0.9, safety_score: 0.8,
-        success_rate: 0.95, latency_score: 0.7, resource_efficiency: 0.85,
-      }])
-    );
-
-    const result = await arenaSubmitCloud("gene-1", {
-      value: 0.9, safety_score: 0.8, success_rate: 0.95,
-      latency_score: 0.7, resource_efficiency: 0.85,
-    });
-
-    expect(result.geneId).toBe("gene-1");
-    expect(result.fitnessValue).toBe(0.9);
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    const postUrl = mockFetch.mock.calls[1][0] as string;
-    expect(postUrl).toContain("/arena_entries");
-    const postOpts = mockFetch.mock.calls[1][1];
-    expect(postOpts.method).toBe("POST");
-  });
-
-  it("throws when gene not found", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse([]));
-    await expect(
-      arenaSubmitCloud("bad-id", { value: 0.5, safety_score: 0.5, success_rate: 0.5, latency_score: 0.5, resource_efficiency: 0.5 })
-    ).rejects.toThrow("not found");
-  });
-
-  it("includes Authorization header when credentials exist", async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse([{
-        id: "g1", name: "t", domain: "d", version: "1", fidelity: "Native",
-        description: "d", phenotype: {}, wasm_size: 0, downloads: 0,
-        reputation_score: null, created_at: "2026-01-01", updated_at: "2026-01-01",
-        published: true, owner_id: "u1",
-        profiles: { username: "u" },
-      }])
-    );
-    mockFetch.mockResolvedValueOnce(
-      mockResponse([{
-        gene_id: "g1", domain: "d", fitness_value: 0.5, safety_score: 0.5,
-        success_rate: 0.5, latency_score: 0.5, resource_efficiency: 0.5,
-      }])
-    );
-
-    await arenaSubmitCloud("g1", {
-      value: 0.5, safety_score: 0.5, success_rate: 0.5, latency_score: 0.5, resource_efficiency: 0.5,
-    });
-
-    const postOpts = mockFetch.mock.calls[1][1];
-    expect(postOpts.headers).toHaveProperty("Prefer");
-    expect(postOpts.headers.Prefer).toContain("return=representation");
   });
 });

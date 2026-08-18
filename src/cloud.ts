@@ -494,68 +494,13 @@ export async function listGeneVersions(
 
 // ── Phase 3: Write operations ──
 
-export interface ArenaSubmitResult {
-  geneId: string;
-  domain: string;
-  fitnessValue: number;
-  safetyScore: number;
-  successRate: number;
-  latencyScore: number;
-  resourceEfficiency: number;
-}
-
-export async function arenaSubmitCloud(
-  geneId: string,
-  fitness: {
-    value: number;
-    safety_score: number;
-    success_rate: number;
-    latency_score: number;
-    resource_efficiency: number;
-  }
-): Promise<ArenaSubmitResult> {
-  const gene = await getGene(geneId);
-
-  const body = {
-    gene_id: geneId,
-    domain: gene.domain,
-    fitness_value: fitness.value,
-    safety_score: fitness.safety_score,
-    success_rate: fitness.success_rate,
-    latency_score: fitness.latency_score,
-    resource_efficiency: fitness.resource_efficiency,
-    last_evaluated: new Date().toISOString(),
-    // This tool takes five numbers from its caller and forwards them. Nothing
-    // here ran a Gene, so the honest label is `declared` — the Arena must be
-    // able to tell these apart from a sandbox measurement (ADR-319 D2/D3).
-    // `evaluation_n` is deliberately absent: no runs stand behind these, and
-    // claiming a sample size would be the lie the column exists to prevent.
-    // 2.4 removes the free-number path entirely; until then it is at least
-    // labelled. `evaluator` is not sent — the server stamps it.
-    evaluation_method: "declared",
-  };
-
-  const res = await fetch(apiUrl("/arena_entries"), {
-    method: "POST",
-    headers: {
-      ...requireAuthHeaders(),
-      Prefer: "return=representation,resolution=merge-duplicates",
-    },
-    body: JSON.stringify(body),
-  });
-
-  const data = await handleResponse<ArenaEntryRow[]>(res);
-  const row = data[0];
-  return {
-    geneId: row.gene_id,
-    domain: row.domain,
-    fitnessValue: row.fitness_value,
-    safetyScore: row.safety_score,
-    successRate: row.success_rate,
-    latencyScore: row.latency_score,
-    resourceEfficiency: row.resource_efficiency,
-  };
-}
+// The Arena write path used to live here: `arenaSubmitCloud()` took five
+// numbers from its caller and POSTed them as fitness. Nothing in that path ran
+// a Gene, so any caller could name its own score. It is gone rather than merely
+// unused — leaving a working "post arbitrary fitness" function in the tree is
+// how the hole gets re-wired by the next change (ADR-319 D3, plan 2.4).
+// Submitting now means measuring: `submitToArena()` shells out to the CLI,
+// which runs the Gene and publishes the per-run evidence with the score.
 
 // ── Gene Reputation ──
 

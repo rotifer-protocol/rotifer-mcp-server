@@ -7,7 +7,6 @@ vi.mock("../../src/cloud.js", () => ({
   getGeneStatsRpc: vi.fn(),
   getReputationLeaderboard: vi.fn(),
   getDeveloperProfile: vi.fn(),
-  arenaSubmitCloud: vi.fn(),
   installGene: vi.fn(),
   loadCloudConfig: vi.fn().mockReturnValue({ endpoint: "https://test.rotifer.dev", anonKey: "test-key" }),
 }));
@@ -23,6 +22,11 @@ vi.mock("../../src/auth.js", () => ({
 
 vi.mock("../../src/open-browser.js", () => ({
   openBrowser: vi.fn(),
+}));
+
+vi.mock("../../src/local.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/local.js")>()),
+  arenaSubmit: vi.fn(),
 }));
 
 import {
@@ -47,11 +51,12 @@ import {
   getGeneStatsRpc,
   getReputationLeaderboard,
   getDeveloperProfile,
-  arenaSubmitCloud,
   installGene,
 } from "../../src/cloud.js";
 
 import { loadCredentials, clearCredentials } from "../../src/auth.js";
+
+import { arenaSubmit } from "../../src/local.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -207,27 +212,56 @@ describe("compareGenes", () => {
 });
 
 describe("submitToArena", () => {
-  it("throws on empty gene_id", async () => {
-    await expect(submitToArena({
-      gene_id: "", fitness_value: 0.5, safety_score: 0.5,
-      success_rate: 0.5, latency_score: 0.5, resource_efficiency: 0.5,
-    })).rejects.toThrow("required");
+  const shellOk = { success: true, exitCode: 0, stdout: "submitted", stderr: "" };
+
+  it("refuses caller-supplied scores and names every one it received", () => {
+    expect(() =>
+      submitToArena({
+        gene_name: "g1", fitness_value: 0.9, safety_score: 0.8,
+        success_rate: 0.95, latency_score: 0.7, resource_efficiency: 0.85,
+      })
+    ).toThrow(/fitness_value.*safety_score.*success_rate.*latency_score.*resource_efficiency/);
+    expect(vi.mocked(arenaSubmit)).not.toHaveBeenCalled();
   });
 
-  it("delegates to arenaSubmitCloud with correct mapping", async () => {
-    vi.mocked(arenaSubmitCloud).mockResolvedValueOnce({
-      geneId: "g1", domain: "d", fitnessValue: 0.9, safetyScore: 0.8,
-      successRate: 0.95, latencyScore: 0.7, resourceEfficiency: 0.85,
+  it("refuses a single supplied score, not just the full set", () => {
+    expect(() => submitToArena({ gene_name: "g1", fitness_value: 1.0 }))
+      .toThrow("no longer accepts scores from the caller");
+    expect(vi.mocked(arenaSubmit)).not.toHaveBeenCalled();
+  });
+
+  it("refuses a zero score — 0 is a claim like any other", () => {
+    expect(() => submitToArena({ gene_name: "g1", safety_score: 0 }))
+      .toThrow("no longer accepts scores from the caller");
+  });
+
+  it("points a gene_id caller at install_gene rather than just failing", () => {
+    expect(() => submitToArena({ gene_id: "6f1a2b3c-0000-0000-0000-000000000000" }))
+      .toThrow(/install_gene/);
+  });
+
+  it("throws when no gene is named", () => {
+    expect(() => submitToArena({})).toThrow("gene_name is required");
+  });
+
+  it("rejects a gene_name that would escape the genes directory", () => {
+    expect(() => submitToArena({ gene_name: "../../etc/passwd" })).toThrow();
+    expect(vi.mocked(arenaSubmit)).not.toHaveBeenCalled();
+  });
+
+  it("delegates a clean call to the CLI measurement path", () => {
+    vi.mocked(arenaSubmit).mockReturnValueOnce(shellOk);
+    const result = submitToArena({ gene_name: "g1", project_root: "/tmp/proj" });
+    expect(result).toEqual(shellOk);
+    expect(vi.mocked(arenaSubmit)).toHaveBeenCalledWith({
+      gene_name: "g1", project_root: "/tmp/proj",
     });
-    const result = await submitToArena({
-      gene_id: "g1", fitness_value: 0.9, safety_score: 0.8,
-      success_rate: 0.95, latency_score: 0.7, resource_efficiency: 0.85,
-    });
-    expect(result.geneId).toBe("g1");
-    expect(vi.mocked(arenaSubmitCloud)).toHaveBeenCalledWith("g1", {
-      value: 0.9, safety_score: 0.8, success_rate: 0.95,
-      latency_score: 0.7, resource_efficiency: 0.85,
-    });
+  });
+
+  it("surfaces a failed measurement instead of reporting success", () => {
+    const failed = { success: false, exitCode: 1, stdout: "", stderr: "sandbox trap" };
+    vi.mocked(arenaSubmit).mockReturnValueOnce(failed);
+    expect(submitToArena({ gene_name: "g1" })).toEqual(failed);
   });
 });
 

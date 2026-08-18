@@ -498,6 +498,22 @@ export function publishGene(options: {
   return rotiferCmd(args, root);
 }
 
+/**
+ * Measure a local Gene in the sandbox and submit the result to the Arena.
+ *
+ * This shells out rather than POSTing scores itself, and that is the point: an
+ * Arena score is a measurement, and the only thing in this repo that can make
+ * one is the CLI, which runs the Gene. Posting numbers from here would let a
+ * caller name its own fitness — the hole ADR-319 D3 closes.
+ */
+export function arenaSubmit(options: {
+  gene_name: string;
+  project_root?: string;
+}): ShellResult {
+  const root = resolveProjectRoot(options.project_root);
+  return rotiferCmd(["arena", "submit", options.gene_name, "--cloud"], root);
+}
+
 export function vgScan(options: {
   path?: string;
   project_root?: string;
