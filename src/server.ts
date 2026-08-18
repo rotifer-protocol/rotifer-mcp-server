@@ -248,19 +248,15 @@ export function createServer(): Server {
       {
         name: "arena_submit",
         description:
-          "Submit a Gene to the Arena with fitness metrics. Requires authentication (rotifer login). Upserts the Gene's Arena entry with 5-dimensional fitness scores.",
+          "Measure a local Gene in the sandbox and submit the measured result to the Arena. Requires authentication (rotifer login) and a Gene that exists locally — use list_local_genes to see them, install_gene to fetch one. The fitness scores are produced by running the Gene, not supplied by the caller: passing fitness_value, safety_score, success_rate, latency_score or resource_efficiency is refused. Runs `rotifer arena submit <gene> --cloud`.",
         inputSchema: {
           type: "object" as const,
           additionalProperties: false,
           properties: {
-            gene_id: { type: "string", description: "Gene UUID to submit" },
-            fitness_value: { type: "number", description: "Overall fitness score F(g) (0-1)" },
-            safety_score: { type: "number", description: "Safety score (0-1)" },
-            success_rate: { type: "number", description: "Success rate (0-1)" },
-            latency_score: { type: "number", description: "Latency score (0-1, higher is better)" },
-            resource_efficiency: { type: "number", description: "Resource efficiency score (0-1)" },
+            gene_name: { type: "string", description: "Local Gene name to measure and submit (see list_local_genes)" },
+            project_root: { type: "string", description: "Project root path (defaults to cwd)" },
           },
-          required: ["gene_id", "fitness_value", "safety_score", "success_rate", "latency_score", "resource_efficiency"],
+          required: ["gene_name"],
         },
       },
       {
@@ -550,7 +546,7 @@ export function createServer(): Server {
   // Tools that address a Gene by its Cloud id.
   const GENE_ID_TOOLS = new Set([
     "get_gene_detail", "get_gene_stats", "install_gene",
-    "arena_submit", "compare_genes", "get_gene_reputation",
+    "compare_genes", "get_gene_reputation",
   ]);
   // Tools that address a Gene by its local directory name. The name is not an
   // id and must never be reported as one: `log_gene_invocation` takes a uuid
@@ -558,7 +554,7 @@ export function createServer(): Server {
   // the §33.4 anti-manipulation gate — never left zero (ADR-319 D0). Resolve
   // through the Gene's Cloud manifest instead, and report nothing when there is
   // no Cloud identity to report against.
-  const GENE_NAME_TOOLS = new Set(["run_gene", "compile_gene"]);
+  const GENE_NAME_TOOLS = new Set(["run_gene", "compile_gene", "arena_submit"]);
 
   function extractGeneId(toolName: string, args: Record<string, unknown>): string | null {
     if (GENE_ID_TOOLS.has(toolName)) {
@@ -625,7 +621,7 @@ export function createServer(): Server {
         case "rollback_gene":
           result = rollbackGene(args as any); break;
         case "arena_submit":
-          result = await submitToArena(args as any); break;
+          result = submitToArena(args as any); break;
         case "create_agent":
           result = createLocalAgent(args as any); break;
         case "agent_run":

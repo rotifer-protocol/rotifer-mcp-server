@@ -122,17 +122,21 @@ describeCloud("empty strings", { timeout: 15000 }, () => {
 });
 
 describeCloud("write operation input abuse", { timeout: 15000 }, () => {
-  it("submitToArena rejects empty gene_id", async () => {
-    await expect(
+  it("submitToArena refuses caller-supplied scores against the live server", () => {
+    expect(() =>
       submitToArena({
-        gene_id: "",
+        gene_name: "anything",
         fitness_value: 0.5,
         safety_score: 0.5,
         success_rate: 0.5,
         latency_score: 0.5,
         resource_efficiency: 0.5,
       }),
-    ).rejects.toThrow("required");
+    ).toThrow("no longer accepts scores from the caller");
+  });
+
+  it("submitToArena rejects an empty gene_name", () => {
+    expect(() => submitToArena({ gene_name: "" })).toThrow("required");
   });
 
   it("installGeneFromCloud rejects empty gene_id", async () => {
