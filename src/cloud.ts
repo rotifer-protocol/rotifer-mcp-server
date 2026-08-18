@@ -525,6 +525,14 @@ export async function arenaSubmitCloud(
     latency_score: fitness.latency_score,
     resource_efficiency: fitness.resource_efficiency,
     last_evaluated: new Date().toISOString(),
+    // This tool takes five numbers from its caller and forwards them. Nothing
+    // here ran a Gene, so the honest label is `declared` — the Arena must be
+    // able to tell these apart from a sandbox measurement (ADR-319 D2/D3).
+    // `evaluation_n` is deliberately absent: no runs stand behind these, and
+    // claiming a sample size would be the lie the column exists to prevent.
+    // 2.4 removes the free-number path entirely; until then it is at least
+    // labelled. `evaluator` is not sent — the server stamps it.
+    evaluation_method: "declared",
   };
 
   const res = await fetch(apiUrl("/arena_entries"), {
