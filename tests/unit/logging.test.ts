@@ -210,13 +210,14 @@ describe("logGeneInvocation", () => {
   });
 });
 
-describe("MCP tool call logging integration", () => {
-  it("server.ts logMcpCall is called on success and failure paths", async () => {
-    const { createServer } = await import("../../src/server.js");
-    const server = createServer();
-    expect(server).toBeDefined();
-  });
-});
+/**
+ * What used to sit here claimed to cover "logMcpCall on success and failure
+ * paths" and asserted only that `createServer()` returned something — so it
+ * passed throughout the whole period when every failure was being logged as a
+ * success. The real coverage lives in
+ * tests/integration/call-log-outcome.test.ts, which drives the server over the
+ * MCP transport and reads what went out on the wire.
+ */
 
 /**
  * The two gates are deliberately different. `telemetryEnabled` also requires a
