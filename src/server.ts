@@ -11,6 +11,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { searchGenes, getGeneDetail, arenaRankings, compareGenes, geneStats, leaderboard, developerProfile, listLocalGenes, listLocalAgents, submitToArena, installGeneFromCloud, rollbackGene, createLocalAgent, agentRun, compileGene, runGene, initGene, scanGenes, wrapGene, testGene, publishGene, authStatus, login, logout, geneVersions, mcpStats, geneReputation, myReputation, domainSuggestion, vgScan, doctor } from "./tools.js";
 import { getGeneStatsRpc, getReputationLeaderboard, getDeveloperProfile, getGene, logMcpCall, logGeneInvocation } from "./cloud.js";
+import { toolCallSucceeded } from "./call-outcome.js";
 import { loadCredentials } from "./auth.js";
 import { resolveLocalGeneCloudId } from "./local.js";
 import { resolveToolSet, unavailableToolMessage, resolveAllowList, blockedEscapeHatches, escapeHatchMessage, resourceAllowed, resourceTemplateAllowed, unavailableResourceMessage } from "./tool-sets.js";
@@ -676,10 +677,15 @@ export function createServer(): Server {
       const callerId = loadCredentials()?.user?.id ?? null;
       const geneId = extractGeneId(name, (args || {}) as Record<string, unknown>);
 
+      // Reached only when the handler returned rather than threw — which is how
+      // these tools report failure too, so the result decides, not the control
+      // flow that got us here.
+      const didSucceed = toolCallSucceeded(result);
+
       logMcpCall({
         tool_name: name,
         gene_id: geneId,
-        success: true,
+        success: didSucceed,
         latency_ms: Date.now() - startMs,
         caller: callerId,
       });
