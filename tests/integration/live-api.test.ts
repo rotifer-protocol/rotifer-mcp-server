@@ -8,8 +8,13 @@ import {
   leaderboard,
   developerProfile,
 } from "../../src/tools.js";
+import { loadCloudConfig } from "../../src/cloud.js";
 
-const hasCloudKey = !!process.env.ROTIFER_CLOUD_ANON_KEY;
+// The key resolves from ~/.rotifer/cloud.json first and only then from the
+// environment, so gating on the env var alone skipped this whole suite on every
+// machine that had logged in — reporting green for tests that never ran. Ask
+// the same loader the code under test asks.
+const hasCloudKey = !!loadCloudConfig().anonKey;
 const describeCloud = hasCloudKey ? describe : describe.skip;
 
 describeCloud("search_genes", { timeout: 15000 }, () => {
@@ -94,9 +99,43 @@ describeCloud("get_arena_rankings", { timeout: 15000 }, () => {
     const r = await arenaRankings({ perPage: 5 });
     if (r.rankings.length > 0) {
       const e = r.rankings[0];
-      expect(typeof e.rank).toBe("number");
+      expect(e.rank === null || typeof e.rank === "number").toBe(true);
+      expect(typeof e.tier).toBe("string");
       expect(typeof e.geneId).toBe("string");
       expect(typeof e.fitness).toBe("number");
+    }
+  });
+
+  // The contract this server broke. These run against the real endpoint on
+  // purpose: the defect was never in how the client handled a reply, it was in
+  // which reply it asked for, and only a real counterpart can tell those apart.
+  it("never hands back a rank the board withheld", async () => {
+    const r = await arenaRankings({ perPage: 50 });
+    expect(r.rankings.length).toBeGreaterThan(0);
+    for (const e of r.rankings) {
+      if (e.tier === "not_evaluated") {
+        expect(e.rank).toBeNull();
+      } else {
+        expect(typeof e.rank).toBe("number");
+      }
+      // A disqualified row may still be shown — with its reason — but never ranked.
+      if (e.invalidationReason) expect(e.rank).toBeNull();
+    }
+  });
+
+  it("does not answer sim.particle with the disqualified March entries", async () => {
+    // Before the repoint this returned six rows: three genes' 0.1.x versions at
+    // fitness 1.000 last evaluated 2026-03-17 — artifacts the runtime refuses
+    // to execute — ranked 1, 2, 3, alongside their replacements.
+    const r = await arenaRankings({ domain: "sim.particle" });
+    // Six rows came back before; three genes exist. One row per logical gene,
+    // not one per version — that difference IS the disqualified versions.
+    const names = r.rankings.map((e) => e.geneName);
+    expect(names.length).toBeGreaterThan(0);
+    expect(new Set(names).size).toBe(names.length);
+    for (const e of r.rankings) {
+      expect(e.versionsOnBoard).toBeGreaterThanOrEqual(1);
+      if (e.tier === "not_evaluated") expect(e.rank).toBeNull();
     }
   });
 });

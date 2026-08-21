@@ -123,7 +123,7 @@ export function createServer(): Server {
       {
         name: "get_arena_rankings",
         description:
-          "Get Arena rankings for a domain with full 5-dimensional fitness metrics: fitness (F(g)), safety, success_rate, latency, and resource_efficiency. Use this to find the best Gene for a capability.",
+          "Get Arena rankings for a domain. Each row carries a tier — `verified` (measured in a sandbox, with enough independent callers to stand), `under_evaluation` (measured, not yet corroborated), `not_evaluated` (disqualified, or a number that was estimated rather than measured) — and `rank` is null wherever the tier grants no rank. Prefer `verified` when picking a Gene for a capability; an estimated or disqualified number is not a measurement of anything. Also returns F(g) before and after the fidelity discount, safety, success_rate, latency, resource_efficiency, sample size and unique callers.",
         inputSchema: {
           type: "object" as const,
           additionalProperties: false,

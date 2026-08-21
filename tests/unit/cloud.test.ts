@@ -140,32 +140,112 @@ describe("getGene", () => {
 });
 
 describe("getArenaRankings", () => {
-  it("sends PostgREST GET with correct query params", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse([]));
+  // Shape of one `get_arena_leaderboard` row, trimmed to what the mapper reads.
+  function lbRow(over: Record<string, unknown> = {}) {
+    return {
+      tier: "verified", tier_rank: 1, gene_id: "abc", gene_name: "test",
+      gene_version: "1.0.0", owner_username: "usr", domain: "d", fidelity: "Native",
+      fitness_value: 0.9, base_fitness: 1.0, fidelity_discount: 0.9, safety_score: 0.8,
+      evaluation_method: "sandbox", evaluation_n: 5, unique_callers: 3,
+      invalidation_reason: null, total_calls: "50", last_evaluated: "2026-01-01",
+      versions_on_board: "2", ...over,
+    };
+  }
+
+  it("asks the leaderboard function, not the arena_entries table", async () => {
+    // The table is what this server used to select, and selecting it is the
+    // whole defect: it cannot see invalidation, tiers, or which version of a
+    // gene should represent it.
+    mockFetch
+      .mockResolvedValueOnce(mockResponse([], 200, { "content-range": "0-0/0" }))
+      .mockResolvedValueOnce(mockResponse([]));
     await getArenaRankings({ domain: "search.web", page: 2, perPage: 10 });
+
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toContain("/arena_entries");
-    expect(url).toContain("domain=eq.search.web");
-    expect(url).toContain("limit=10");
-    expect(url).toContain("offset=10");
-    expect(opts.method ?? "GET").toBe("GET");
+    expect(url).toContain("/rpc/get_arena_leaderboard");
+    expect(url).not.toContain("/arena_entries");
+    expect(opts.method).toBe("POST");
+    expect(JSON.parse(opts.body)).toEqual({ p_domain: "search.web", p_limit: 10, p_offset: 10 });
   });
 
-  it("parses rank and full metrics", async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockResponse([{
-        gene_id: "abc", domain: "d", fitness_value: 0.9, safety_score: 0.8,
-        success_rate: 0.95, latency_score: 0.7, resource_efficiency: 0.85,
-        total_calls: "50", last_evaluated: "2026-01-01",
-        genes: { id: "abc", name: "test", fidelity: "Native", profiles: { username: "usr" } },
-      }])
-    );
+  it("carries the tier and the rank the tier granted", async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockResponse([lbRow()], 200, { "content-range": "0-0/1" }))
+      .mockResolvedValueOnce(mockResponse([{
+        gene_id: "abc", success_rate: 0.95, latency_score: 0.7, resource_efficiency: 0.85,
+      }]));
     const result = await getArenaRankings({});
-    expect(result.rankings[0].rank).toBe(1);
-    expect(result.rankings[0].totalCalls).toBe(50);
-    expect(result.rankings[0].successRate).toBe(0.95);
-    expect(result.rankings[0].latencyScore).toBe(0.7);
-    expect(result.rankings[0].resourceEfficiency).toBe(0.85);
+    const e = result.rankings[0];
+
+    expect(e.tier).toBe("verified");
+    expect(e.rank).toBe(1);
+    expect(e.geneVersion).toBe("1.0.0");
+    expect(e.owner).toBe("usr");
+    expect(e.baseFitness).toBe(1.0);
+    expect(e.evaluationMethod).toBe("sandbox");
+    expect(e.uniqueCallers).toBe(3);
+    expect(e.versionsOnBoard).toBe(2);
+    expect(e.totalCalls).toBe(50);
+    // The three dimensions the leaderboard does not carry, merged back in.
+    expect(e.successRate).toBe(0.95);
+    expect(e.latencyScore).toBe(0.7);
+    expect(e.resourceEfficiency).toBe(0.85);
+    expect(result.total).toBe(1);
+  });
+
+  it("reports no rank for a row the board granted none", async () => {
+    // This is the case that mattered. `sim.particle` answered with three
+    // entries at fitness 1.000 whose artifacts the runtime refuses to execute,
+    // ranked 1-2-3 by array position. A null tier_rank must survive as null.
+    mockFetch
+      .mockResolvedValueOnce(mockResponse(
+        [lbRow({ tier: "not_evaluated", tier_rank: null, invalidation_reason: "async-express-artifact" })],
+        200, { "content-range": "0-0/1" },
+      ))
+      .mockResolvedValueOnce(mockResponse([]));
+    const result = await getArenaRankings({});
+
+    expect(result.rankings[0].rank).toBeNull();
+    expect(result.rankings[0].tier).toBe("not_evaluated");
+    expect(result.rankings[0].invalidationReason).toBe("async-express-artifact");
+  });
+
+  it("does not renumber rows by their position in the array", async () => {
+    // The old mapper assigned `offset + i + 1`, so page 2 of anything came back
+    // ranked 11, 12, 13 whatever the board said. Give it rows whose ranks are
+    // neither sequential nor positional and check they arrive untouched.
+    mockFetch
+      .mockResolvedValueOnce(mockResponse(
+        [lbRow({ tier_rank: 4 }), lbRow({ tier: "not_evaluated", tier_rank: null }), lbRow({ tier_rank: 1 })],
+        200, { "content-range": "0-2/3" },
+      ))
+      .mockResolvedValueOnce(mockResponse([]));
+    const result = await getArenaRankings({ page: 2, perPage: 10 });
+
+    expect(result.rankings.map((r) => r.rank)).toEqual([4, null, 1]);
+  });
+
+  it("still returns the rankings when the metrics lookup fails", async () => {
+    // Exercised, not merely written: the second call is made to reject, and the
+    // three optional dimensions come back null while everything else survives.
+    mockFetch
+      .mockResolvedValueOnce(mockResponse([lbRow()], 200, { "content-range": "0-0/1" }))
+      .mockRejectedValueOnce(new Error("network down"));
+    const result = await getArenaRankings({});
+
+    expect(result.rankings[0].fitness).toBe(0.9);
+    expect(result.rankings[0].tier).toBe("verified");
+    expect(result.rankings[0].successRate).toBeNull();
+    expect(result.rankings[0].latencyScore).toBeNull();
+    expect(result.rankings[0].resourceEfficiency).toBeNull();
+  });
+
+  it("skips the metrics lookup entirely when the board returned nothing", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse([], 200, { "content-range": "*/0" }));
+    const result = await getArenaRankings({ domain: "nothing.here" });
+
+    expect(result.rankings).toEqual([]);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });
 
