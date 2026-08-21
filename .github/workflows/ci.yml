@@ -306,3 +306,14 @@ jobs:
           else
             echo "::warning::Integration test report upload failed"
           fi
+
+  regression-guard:
+    if: github.event_name == 'pull_request'
+    name: Regression Guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+      - uses: rotifer-protocol/rotifer-playground/.github/actions/regression-guard@main
