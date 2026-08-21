@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.16.1...v0.17.0) (2026-08-21)
+
+
+### Features
+
+* **arena:** label arena_submit's numbers as declared ([#116](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/116)) ([596c0b7](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/596c0b7429a0bcffbd062f74d9e97fda3a6e60a9))
+* **arena:** make arena_submit measure a Gene instead of accepting its score ([#118](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/118)) ([6639836](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/663983697ac98311bdd5be1239a77c85111d3a5d))
+
+
+### Bug Fixes
+
+* **arena:** rankings went on serving the entries the board disqualified ([#122](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/122)) ([9504dd9](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/9504dd914aa8dfb875c8edc339e515b21cec8f8a))
+* **telemetry:** log whether the call worked, not whether it threw ([#119](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/119)) ([0d6d960](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/0d6d960d00bc1a108986403b4522be639835dc86))
+
 ## [0.16.1](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.16.0...v0.16.1) (2026-08-17)
 
 
