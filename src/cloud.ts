@@ -7,7 +7,6 @@ import { snapshotGene, type SnapshotMeta } from "./snapshots.js";
 import type {
   GeneRow,
   SearchGeneRow,
-  ArenaEntryRow,
   GeneStatsRpcResult,
   LeaderboardRow,
   ProfileRow,
@@ -272,17 +271,37 @@ export async function getGeneByContentHash(hash: string): Promise<Gene & { pheno
 }
 
 export interface ArenaEntry {
-  rank: number;
+  /**
+   * Null where the row earned no rank. A tier of `not_evaluated` has no order
+   * to report, and inventing one — by position in the array, as this tool used
+   * to — hands the row back exactly the authority the tier took away.
+   */
+  rank: number | null;
+  /** `verified` | `under_evaluation` | `not_evaluated`. */
+  tier: string;
   geneId: string;
   geneName: string;
+  geneVersion: string;
   owner: string;
   domain: string;
   fidelity: string;
   fitness: number;
+  /** F(g) before the fidelity discount, so the discount is visible rather than baked in. */
+  baseFitness: number | null;
+  fidelityDiscount: number | null;
   safety: number;
-  successRate: number;
-  latencyScore: number;
-  resourceEfficiency: number;
+  successRate: number | null;
+  latencyScore: number | null;
+  resourceEfficiency: number | null;
+  /** How the number was arrived at: `sandbox`, `binding_runtime`, `estimated`, ... */
+  evaluationMethod: string | null;
+  /** Sample size behind the number. */
+  evaluationN: number | null;
+  uniqueCallers: number;
+  /** Why this row was disqualified, when it was. */
+  invalidationReason: string | null;
+  /** How many versions of this gene sit on the board behind the one shown. */
+  versionsOnBoard: number;
   reputationScore: number | null;
   totalCalls: number;
   lastEvaluated: string;
@@ -297,6 +316,85 @@ export interface ArenaRankingsResult {
   domain: string | null;
 }
 
+/** One row of `get_arena_leaderboard`, straight off the wire. */
+interface LeaderboardRpcRow {
+  tier: string;
+  tier_rank: number | null;
+  gene_id: string;
+  gene_name: string;
+  gene_version: string;
+  owner_username: string;
+  domain: string;
+  fidelity: string;
+  fitness_value: number;
+  base_fitness: number | null;
+  fidelity_discount: number | null;
+  safety_score: number;
+  evaluation_method: string | null;
+  evaluation_n: number | null;
+  unique_callers: number;
+  invalidation_reason: string | null;
+  total_calls: number | string;
+  last_evaluated: string;
+  versions_on_board: number | string;
+}
+
+/** The three per-entry dimensions `get_arena_leaderboard` does not carry. */
+interface ArenaMetricsRow {
+  gene_id: string;
+  success_rate: number | null;
+  latency_score: number | null;
+  resource_efficiency: number | null;
+}
+
+/**
+ * The per-entry dimensions, fetched for rows the leaderboard already picked.
+ *
+ * This does select `arena_entries` directly — the pattern the function above
+ * exists to stop using — and it is safe here only because the ids come from the
+ * leaderboard. It cannot surface a row the leaderboard withheld; it can only
+ * decorate one the leaderboard already chose to show. Do not lift this query
+ * out and rank what it returns.
+ *
+ * A failure here costs three optional fields, not the rankings, so it degrades
+ * to nulls rather than taking the whole call down with it.
+ */
+async function fetchArenaMetrics(geneIds: string[]): Promise<Map<string, ArenaMetricsRow>> {
+  const byGene = new Map<string, ArenaMetricsRow>();
+  if (geneIds.length === 0) return byGene;
+
+  const params = new URLSearchParams();
+  params.set("select", "gene_id,success_rate,latency_score,resource_efficiency");
+  params.set("gene_id", `in.(${geneIds.join(",")})`);
+
+  try {
+    const res = await fetch(apiUrl(`/arena_entries?${params}`), { headers: headers() });
+    if (!res.ok) return byGene;
+    for (const row of (await res.json()) as ArenaMetricsRow[]) {
+      byGene.set(row.gene_id, row);
+    }
+  } catch {
+    // Leave the map empty; the caller fills nulls.
+  }
+  return byGene;
+}
+
+/**
+ * Arena rankings for a domain.
+ *
+ * Goes through `get_arena_leaderboard` rather than selecting `arena_entries`
+ * directly. A direct select cannot see any of what makes a ranking mean
+ * something: it ranked every row alike, never consulted `invalidated_at`, and
+ * showed several versions of one gene as several competitors.
+ *
+ * That was not theoretical. The CLI and the websites moved to this function
+ * when the Arena invalidation criteria shipped; this server did not, and went
+ * on serving the disqualified rows. Asked for `sim.particle` it answered with
+ * three entries at fitness 1.000 last evaluated five months earlier — every one
+ * of them disqualified, because the artifact behind the score is one the
+ * runtime refuses to execute. The tool that returned them describes itself as
+ * the way to find the best Gene for a capability.
+ */
 export async function getArenaRankings(options: {
   domain?: string;
   page?: number;
@@ -305,39 +403,48 @@ export async function getArenaRankings(options: {
   const limit = Math.min(options.perPage || 20, 50);
   const offset = ((options.page || 1) - 1) * limit;
 
-  const params = new URLSearchParams();
-  params.set(
-    "select",
-    "gene_id,domain,fitness_value,safety_score,success_rate,latency_score,resource_efficiency,total_calls,last_evaluated,genes(id,name,fidelity,profiles(username))"
-  );
-  if (options.domain) params.set("domain", `eq.${options.domain}`);
-  params.set("order", "fitness_value.desc");
-  params.set("limit", String(limit));
-  params.set("offset", String(offset));
-
-  const res = await fetch(apiUrl(`/arena_entries?${params}`), {
-    headers: { ...headers(), Prefer: "count=exact" },
+  const res = await fetch(rpcUrl("get_arena_leaderboard"), {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json", Prefer: "count=exact" },
+    body: JSON.stringify({
+      p_domain: options.domain ?? null,
+      p_limit: limit,
+      p_offset: offset,
+    }),
   });
 
   const total = parseInt(res.headers.get("content-range")?.split("/")[1] || "0", 10);
-  const data = await handleResponse<ArenaEntryRow[]>(res);
+  const data = await handleResponse<LeaderboardRpcRow[]>(res);
+  const metrics = await fetchArenaMetrics(data.map((row) => row.gene_id));
 
-  const rankings: ArenaEntry[] = data.map((row, i) => ({
-    rank: offset + i + 1,
-    geneId: row.gene_id,
-    geneName: row.genes?.name || "unknown",
-    owner: row.genes?.profiles?.username || "unknown",
-    domain: row.domain,
-    fidelity: row.genes?.fidelity || "Unknown",
-    fitness: row.fitness_value,
-    safety: row.safety_score,
-    successRate: row.success_rate,
-    latencyScore: row.latency_score,
-    resourceEfficiency: row.resource_efficiency,
-    totalCalls: Number(row.total_calls) || 0,
-    reputationScore: null,
-    lastEvaluated: row.last_evaluated,
-  }));
+  const rankings: ArenaEntry[] = data.map((row) => {
+    const m = metrics.get(row.gene_id);
+    return {
+      rank: row.tier_rank === null ? null : Number(row.tier_rank),
+      tier: row.tier,
+      geneId: row.gene_id,
+      geneName: row.gene_name,
+      geneVersion: row.gene_version,
+      owner: row.owner_username,
+      domain: row.domain,
+      fidelity: row.fidelity,
+      fitness: row.fitness_value,
+      baseFitness: row.base_fitness,
+      fidelityDiscount: row.fidelity_discount,
+      safety: row.safety_score,
+      successRate: m?.success_rate ?? null,
+      latencyScore: m?.latency_score ?? null,
+      resourceEfficiency: m?.resource_efficiency ?? null,
+      evaluationMethod: row.evaluation_method,
+      evaluationN: row.evaluation_n,
+      uniqueCallers: Number(row.unique_callers) || 0,
+      invalidationReason: row.invalidation_reason,
+      versionsOnBoard: Number(row.versions_on_board) || 1,
+      reputationScore: null,
+      totalCalls: Number(row.total_calls) || 0,
+      lastEvaluated: row.last_evaluated,
+    };
+  });
 
   const page = options.page || 1;
   return { rankings, total, page, per_page: limit, has_more: offset + limit < total, domain: options.domain || null };
