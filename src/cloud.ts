@@ -2,6 +2,7 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { loadCredentials } from "./auth.js";
+import { telemetryOptedOutByEnv } from "./telemetry/consent.js";
 import { validateGeneName } from "./validate-gene-name.js";
 import { snapshotGene, type SnapshotMeta } from "./snapshots.js";
 import type {
@@ -762,9 +763,13 @@ export function telemetryEnabled(caller: string | null): boolean {
  * reported" — and an opt-out that leaves one request behind is the same defect
  * as no opt-out at all, only harder to notice.
  */
+/**
+ * Delegates to the shared check (telemetry/consent.js) so this and the
+ * anonymous heartbeat (ADR-329) can never drift apart on what "off" means.
+ * ADR-329's decision is explicit that ROTIFER_TELEMETRY=0 turns off both.
+ */
 export function telemetryOptedOut(): boolean {
-  const flag = (process.env.ROTIFER_TELEMETRY || "").trim().toLowerCase();
-  return flag === "0" || flag === "false" || flag === "off";
+  return telemetryOptedOutByEnv();
 }
 
 export function logMcpCall(entry: {
@@ -817,13 +822,13 @@ export function logGeneInvocation(
   // idempotency guard server-side, so the pair of reports a single `run_gene`
   // still produces (ADR-322 D2 is open) collapses to one row even though the
   // two reports now arrive at different functions.
-  const useV2 = typeof channel === "string" && channel.length > 0;
+  const isUseV2 = typeof channel === "string" && channel.length > 0;
 
-  fetch(rpcUrl(useV2 ? "log_gene_invocation_v2" : "log_gene_invocation"), {
+  fetch(rpcUrl(isUseV2 ? "log_gene_invocation_v2" : "log_gene_invocation"), {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(
-      useV2
+      isUseV2
         ? {
             p_gene_id: geneId,
             p_caller_agent_id: callerAgentId,
