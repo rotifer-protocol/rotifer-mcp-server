@@ -13,6 +13,7 @@ import { searchGenes, getGeneDetail, arenaRankings, compareGenes, geneStats, lea
 import { getGeneStatsRpc, getReputationLeaderboard, getDeveloperProfile, getGene, logMcpCall, logGeneInvocation } from "./cloud.js";
 import { toolCallSucceeded } from "./call-outcome.js";
 import { resolveMcpChannel } from "./channel.js";
+import { recordHeartbeat } from "./telemetry/heartbeat.js";
 import { loadCredentials } from "./auth.js";
 import { resolveLocalGeneCloudId, setSpawnedCliChannel } from "./local.js";
 import { resolveToolSet, unavailableToolMessage, resolveAllowList, blockedEscapeHatches, escapeHatchMessage, resourceAllowed, resourceTemplateAllowed, unavailableResourceMessage } from "./tool-sets.js";
@@ -705,6 +706,17 @@ export function createServer(): Server {
         logGeneInvocation(geneId, callerId, channel);
       }
 
+      // Separate, narrower signal: any Gene running at all, no identity or
+      // Cloud origin required, on by default (ADR-329). Unconditional on
+      // name === "run_gene" alone — unlike the report above, it must not be
+      // gated on callerId/geneId, or a locally-authored Gene run by a signed-
+      // out user (exactly who this signal exists to cover) would never be
+      // counted.
+      let heartbeatNotice: string | null = null;
+      if (name === "run_gene") {
+        heartbeatNotice = recordHeartbeat(channel);
+      }
+
       const content: Array<{ type: "text"; text: string }> = [
         { type: "text", text: JSON.stringify(result, null, 2) },
       ];
@@ -712,6 +724,14 @@ export function createServer(): Server {
       if (!isVersionWarningShown && cachedVersionInfo?.updateAvailable) {
         isVersionWarningShown = true;
         content.push({ type: "text", text: formatUpdateHint(cachedVersionInfo) });
+      }
+
+      // stderr is where CLI users look and exactly where MCP hosts do not —
+      // see heartbeat.ts's file comment. Folded into the response instead so
+      // it is something the user's client will actually surface, and only on
+      // the one call in this machine's lifetime that returns non-null.
+      if (heartbeatNotice) {
+        content.push({ type: "text", text: heartbeatNotice });
       }
 
       return { content };
