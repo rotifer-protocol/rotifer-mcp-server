@@ -195,6 +195,36 @@ describe("logGeneInvocation", () => {
     expect(body.p_caller_agent_id).toBe(SIGNED_IN);
   });
 
+  it("sends the channel through v2 when given one", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    globalThis.fetch = mockFetch;
+
+    const { logGeneInvocation } = await import("../../src/cloud.js");
+    logGeneInvocation("gene-1", SIGNED_IN, "mcp:dsh");
+
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toContain("/rpc/log_gene_invocation_v2");
+    const body = JSON.parse(opts.body);
+    expect(body.p_client_channel).toBe("mcp:dsh");
+    expect(body.p_gene_id).toBe("gene-1");
+  });
+
+  it("falls back to the original RPC when no channel is supplied", async () => {
+    // A registry that has not applied migration 20260830000000 has no v2 to
+    // call. Losing the attribution must never cost the invocation itself.
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+    globalThis.fetch = mockFetch;
+
+    const { logGeneInvocation } = await import("../../src/cloud.js");
+    logGeneInvocation("gene-1", SIGNED_IN);
+
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toMatch(/\/rpc\/log_gene_invocation$/);
+    expect(JSON.parse(opts.body)).not.toHaveProperty("p_client_channel");
+  });
+
   // Opting out means all of it, not just the half the user happened to read
   // about.
   it("sends nothing when ROTIFER_TELEMETRY=0", async () => {
