@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.17.0...v0.18.0) (2026-08-30)
+
+
+### Features
+
+* **invocation:** 上报调用时带上宿主渠道 ([#123](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/123)) ([9de7f77](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/9de7f77232ff0ac8d051fde2549ffcd28489d7dd))
+* **telemetry:** 心跳客户端——共享存储、渠道折叠复用、提示进工具响应 ([#125](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/125)) ([9bf987a](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/9bf987a981958a25472a42bb4e70bffbc4f324f7))
+
 ## [0.17.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.16.1...v0.17.0) (2026-08-21)
 
 
