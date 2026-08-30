@@ -12,8 +12,9 @@ import {
 import { searchGenes, getGeneDetail, arenaRankings, compareGenes, geneStats, leaderboard, developerProfile, listLocalGenes, listLocalAgents, submitToArena, installGeneFromCloud, rollbackGene, createLocalAgent, agentRun, compileGene, runGene, initGene, scanGenes, wrapGene, testGene, publishGene, authStatus, login, logout, geneVersions, mcpStats, geneReputation, myReputation, domainSuggestion, vgScan, doctor } from "./tools.js";
 import { getGeneStatsRpc, getReputationLeaderboard, getDeveloperProfile, getGene, logMcpCall, logGeneInvocation } from "./cloud.js";
 import { toolCallSucceeded } from "./call-outcome.js";
+import { resolveMcpChannel } from "./channel.js";
 import { loadCredentials } from "./auth.js";
-import { resolveLocalGeneCloudId } from "./local.js";
+import { resolveLocalGeneCloudId, setSpawnedCliChannel } from "./local.js";
 import { resolveToolSet, unavailableToolMessage, resolveAllowList, blockedEscapeHatches, escapeHatchMessage, resourceAllowed, resourceTemplateAllowed, unavailableResourceMessage } from "./tool-sets.js";
 import { getPackageVersion, getVersionInfo, formatUpdateHint, type VersionInfo } from "./version.js";
 
@@ -573,6 +574,14 @@ export function createServer(): Server {
     const { name, arguments: args } = request.params;
     const startMs = Date.now();
 
+    // Resolved per call rather than once at startup: `getClientVersion()` is
+    // only populated after the `initialize` handshake completes, which is not
+    // guaranteed to have happened when createServer() runs.
+    const channel = resolveMcpChannel(server.getClientVersion()?.name);
+    // `run_gene` does not execute the Gene here — it shells out to the CLI,
+    // which reports the invocation itself and would otherwise call it `cli`.
+    setSpawnedCliChannel(channel);
+
     function mapPerPage(a: Record<string, unknown>): Record<string, unknown> {
       if ("per_page" in a) {
         const { per_page, ...rest } = a;
@@ -691,7 +700,9 @@ export function createServer(): Server {
       });
 
       if (name === "run_gene" && callerId && geneId) {
-        logGeneInvocation(geneId, callerId);
+        // The client identified itself during `initialize`; that is what turns
+        // "an MCP call" into "a call from DSH" in the ledger.
+        logGeneInvocation(geneId, callerId, channel);
       }
 
       const content: Array<{ type: "text"; text: string }> = [

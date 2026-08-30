@@ -805,16 +805,35 @@ export function logMcpCall(entry: {
  * this check adds: someone who sets ROTIFER_TELEMETRY=0 means all of it, not
  * just the part they were shown.
  */
-export function logGeneInvocation(geneId: string, callerAgentId: string): void {
+export function logGeneInvocation(
+  geneId: string,
+  callerAgentId: string,
+  channel?: string | null,
+): void {
   if (!telemetryEnabled(callerAgentId)) return;
 
-  fetch(rpcUrl("log_gene_invocation"), {
+  // v2 carries the channel; the original entry point stays for registries that
+  // have not applied playground migration 20260830000000 yet. Both share one
+  // idempotency guard server-side, so the pair of reports a single `run_gene`
+  // still produces (ADR-322 D2 is open) collapses to one row even though the
+  // two reports now arrive at different functions.
+  const useV2 = typeof channel === "string" && channel.length > 0;
+
+  fetch(rpcUrl(useV2 ? "log_gene_invocation_v2" : "log_gene_invocation"), {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({
-      p_gene_id: geneId,
-      p_caller_agent_id: callerAgentId,
-    }),
+    body: JSON.stringify(
+      useV2
+        ? {
+            p_gene_id: geneId,
+            p_caller_agent_id: callerAgentId,
+            p_client_channel: channel,
+          }
+        : {
+            p_gene_id: geneId,
+            p_caller_agent_id: callerAgentId,
+          },
+    ),
   }).catch(() => {});
 }
 

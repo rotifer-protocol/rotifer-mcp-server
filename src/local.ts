@@ -322,12 +322,17 @@ export interface ShellResult {
   stderr: string;
 }
 
-function shellExec(cmd: string, args: string[], cwd?: string): ShellResult {
+function shellExec(
+  cmd: string,
+  args: string[],
+  cwd?: string,
+  extraEnv?: Record<string, string>,
+): ShellResult {
   const result = spawnSync(cmd, args, {
     cwd: cwd || process.cwd(),
     timeout: 120_000,
     encoding: "utf-8",
-    env: { ...process.env },
+    env: { ...process.env, ...extraEnv },
   });
   return {
     success: result.status === 0,
@@ -343,14 +348,39 @@ function resolveRotiferBin(): string {
   return "npx";
 }
 
+/**
+ * The channel this server reports under, handed down to any CLI it spawns.
+ *
+ * Set once by the server when the MCP client identifies itself. Module-level
+ * rather than threaded through every shell-out because `rotiferCmd` has a
+ * dozen callers and only one of them (`run_gene`) leads to a report — passing
+ * a parameter through the other eleven would be noise that the next person
+ * deletes.
+ */
+let spawnedCliChannel: string | null = null;
+
+/** Called by the server once the MCP handshake has named the client. */
+export function setSpawnedCliChannel(channel: string | null): void {
+  spawnedCliChannel = channel;
+}
+
 function rotiferCmd(args: string[], cwd?: string): ShellResult {
   const bin = resolveRotiferBin();
+  // Tell the spawned CLI which entry point it is really serving. Without this
+  // the CLI reports itself as `cli` — and since it reports before this server
+  // does, and the two reports collapse into whichever arrives first, every MCP
+  // call would be filed under `cli` and the column would answer the wrong
+  // question with total confidence.
+  //
+  // Older CLIs ignore the variable, which is the honest outcome: they report
+  // no channel at all rather than a wrong one.
+  const extraEnv = spawnedCliChannel ? { ROTIFER_INVOCATION_CHANNEL: spawnedCliChannel } : undefined;
   if (bin === "npx") {
     // The bare "rotifer" name is unclaimed on npm; invoking it via npx would
     // execute whatever package squats that name. Always pin the scoped package.
-    return shellExec("npx", ["-y", "@rotifer/playground", ...args], cwd);
+    return shellExec("npx", ["-y", "@rotifer/playground", ...args], cwd, extraEnv);
   }
-  return shellExec(bin, args, cwd);
+  return shellExec(bin, args, cwd, extraEnv);
 }
 
 export function agentRun(options: {
