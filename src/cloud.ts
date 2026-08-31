@@ -803,8 +803,58 @@ export function logMcpCall(entry: {
 }
 
 /**
+ * Reports still in flight. Emptied as each settles; see flushInvocationReports.
+ *
+ * Scoped to logGeneInvocation specifically — not logMcpCall, not the
+ * heartbeat in telemetry/heartbeat.ts. Those are dispensable ops signals
+ * (heartbeat.ts's own file comment: "a dropped heartbeat ... will show up
+ * again tomorrow if the machine is still in use"). This one feeds the §33.4
+ * anti-manipulation ledger — the CLI's equivalent (recordGeneInvocation in
+ * playground's cloud/invocation.ts) already tracks in-flight requests for
+ * exactly this reason, and this file did not.
+ */
+const inFlight = new Set<Promise<void>>();
+
+/**
+ * Longest a caller will wait for reports to settle before giving up anyway.
+ * Matches playground's cloud/invocation.ts FLUSH_TIMEOUT_MS and the reasoning
+ * behind it: 2000ms was the original value here, measured wrong — 10 real
+ * requests to cloud.rotifer.dev this same session showed TLS handshake alone
+ * ranging ~0.4s–2.0s and total request time up to 2.57s. Starting at the
+ * already-corrected figure rather than rediscovering the same mistake.
+ */
+export const FLUSH_TIMEOUT_MS = 8000;
+
+/**
+ * Wait for any in-flight invocation reports to settle, or give up after
+ * FLUSH_TIMEOUT_MS. Call this before the process actually exits (see
+ * index.ts's SIGINT/SIGTERM handlers) — a long-lived MCP server does not
+ * need this (an unawaited open request keeps Node's event loop alive on its
+ * own, the same way playground's CLI does when it simply returns), but an
+ * explicit kill() bypasses that entirely and was the exact repro: a
+ * diagnostic script that called run_gene and killed the process right after
+ * getting the response found nothing had been written, silently, with
+ * ROTIFER_DEBUG producing no output either — confirmed by hand, 2026-08-30.
+ */
+export async function flushInvocationReports(timeoutMs: number = FLUSH_TIMEOUT_MS): Promise<void> {
+  if (inFlight.size === 0) return;
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, timeoutMs);
+    timer.unref?.();
+  });
+  await Promise.race([Promise.allSettled([...inFlight]).then(() => undefined), deadline]);
+  if (timer) clearTimeout(timer);
+}
+
+/**
  * Record a gene invocation for §33.4 anti-manipulation metrics.
- * Fire-and-forget — failures are silently ignored.
+ * Fire-and-forget — a failed report never fails the tool call — but tracked
+ * in `inFlight` so a caller about to exit can give it a chance to land
+ * first, and logged to stderr under ROTIFER_DEBUG rather than swallowed
+ * outright: a silently-eaten error is how this exact gap went unnoticed
+ * (ADR-322's own history), and this function had no debug output at all
+ * where the CLI's equivalent always did.
  *
  * Its caller already only reaches this when signed in, so the opt-out is what
  * this check adds: someone who sets ROTIFER_TELEMETRY=0 means all of it, not
@@ -823,8 +873,19 @@ export function logGeneInvocation(
   // still produces (ADR-322 D2 is open) collapses to one row even though the
   // two reports now arrive at different functions.
   const isUseV2 = typeof channel === "string" && channel.length > 0;
+  const rpc = isUseV2 ? "log_gene_invocation_v2" : "log_gene_invocation";
 
-  fetch(rpcUrl(isUseV2 ? "log_gene_invocation_v2" : "log_gene_invocation"), {
+  // flushInvocationReports() giving up after FLUSH_TIMEOUT_MS only stops the
+  // *caller* from waiting — it does not by itself end this fetch. Without the
+  // abort, a stalled endpoint would hang whatever is waiting on the flush for
+  // however long the OS's own TCP timeout takes, not just FLUSH_TIMEOUT_MS
+  // (same bug, already found and fixed on the CLI side this session — see
+  // heartbeat.ts's regression test there for the mechanism).
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), FLUSH_TIMEOUT_MS);
+  abortTimer.unref?.();
+
+  const settled: Promise<void> = fetch(rpcUrl(rpc), {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(
@@ -839,7 +900,24 @@ export function logGeneInvocation(
             p_caller_agent_id: callerAgentId,
           },
     ),
-  }).catch(() => {});
+    signal: controller.signal,
+  })
+    .then((res) => {
+      if (!res.ok && process.env.ROTIFER_DEBUG) {
+        process.stderr.write(`[rotifer-mcp] ${rpc} failed (${res.status})\n`);
+      }
+    })
+    .catch((err: unknown) => {
+      if (process.env.ROTIFER_DEBUG) {
+        process.stderr.write(`[rotifer-mcp] ${rpc} error: ${(err as Error)?.message ?? err}\n`);
+      }
+    })
+    .finally(() => {
+      clearTimeout(abortTimer);
+      inFlight.delete(settled);
+    });
+
+  inFlight.add(settled);
 }
 
 export interface McpStatsResult {
