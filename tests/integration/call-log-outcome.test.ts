@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { runGene } from "../../src/local.js";
+import { createServer } from "../../src/server.js";
 
 /**
  * The acceptance test for ADR-319 plan item 2.9: a call that fails must be
@@ -15,63 +17,80 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
  * The `run_gene` shell-out is stubbed rather than executed: the point is the
  * seam, and a real shell-out would either need a compiled gene on disk or fall
  * back to `npx @rotifer/playground`, which reaches the network from CI.
+ *
+ * Rewritten 2026-08-31 from a per-test `vi.doMock` + `vi.resetModules()` +
+ * fresh dynamic `import("../../src/server.js")` — three tests, each
+ * re-registering mocks and re-importing the whole module graph from scratch.
+ * That pattern was reported flaky (this exact file, ~1-in-3 locally at the
+ * time), and `toolCallSucceeded()` (src/call-outcome.ts) is a pure function of
+ * its `result` argument with no shared mutable state to race on — the only way
+ * a test here could see the *wrong* boolean is if it ran against a *stale*
+ * mock, i.e. a `runGeneResult` closure left over from a different test's
+ * `vi.doMock` registration. Repeated re-mock + re-import per test is exactly
+ * the shape of thing that can leave stale registry state on some runs and not
+ * others; a single hoisted `vi.mock` with one server built once and a mock
+ * return value swapped per test removes that whole mechanism rather than
+ * trying to sequence it correctly. Could not reproduce the original failure
+ * locally (21 runs of the old version, 0 failures) to confirm this is the
+ * exact mechanism — see the PR this shipped in for the honest account of what
+ * is and isn't proven here.
  */
 
 const SIGNED_IN = { user: { id: "user-2-9", username: "tester" }, provider: "github" };
 
-async function serverWithCapturedLogs(runGeneResult: unknown) {
-  vi.doMock("../../src/auth.js", async () => {
-    const actual = await vi.importActual<typeof import("../../src/auth.js")>("../../src/auth.js");
-    return { ...actual, loadCredentials: () => SIGNED_IN };
-  });
-  vi.doMock("../../src/local.js", async () => {
-    const actual = await vi.importActual<typeof import("../../src/local.js")>("../../src/local.js");
-    return { ...actual, runGene: () => runGeneResult };
-  });
+vi.mock("../../src/auth.js", async () => {
+  const actual = await vi.importActual<typeof import("../../src/auth.js")>("../../src/auth.js");
+  return { ...actual, loadCredentials: () => SIGNED_IN };
+});
 
-  const logged: Array<Record<string, unknown>> = [];
-  globalThis.fetch = vi.fn(async (url: any, init: any) => {
-    if (String(url).includes("log_mcp_call")) {
-      logged.push(JSON.parse(init.body));
-    }
-    return { ok: true, status: 201, json: async () => ({}), text: async () => "" } as any;
-  }) as any;
+vi.mock("../../src/local.js", async () => {
+  const actual = await vi.importActual<typeof import("../../src/local.js")>("../../src/local.js");
+  return { ...actual, runGene: vi.fn() };
+});
 
-  const { createServer } = await import("../../src/server.js");
+let client: Client;
+let cleanup: () => Promise<void>;
+let logged: Array<Record<string, unknown>>;
+let originalFetch: typeof globalThis.fetch;
+let originalFlag: string | undefined;
+
+beforeAll(async () => {
   const server = createServer();
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
-  const client = new Client({ name: "outcome-test", version: "1.0.0" });
+  client = new Client({ name: "outcome-test", version: "1.0.0" });
   await client.connect(clientTransport);
-
-  return {
-    client,
-    logged,
-    cleanup: async () => {
-      await client.close();
-      await server.close();
-    },
+  cleanup = async () => {
+    await client.close();
+    await server.close();
   };
-}
+});
+
+afterAll(async () => {
+  await cleanup?.();
+});
 
 describe("mcp_call_log records the outcome, not the control flow", () => {
-  let originalFetch: typeof globalThis.fetch;
-  let originalFlag: string | undefined;
-
   beforeEach(() => {
     originalFetch = globalThis.fetch;
     originalFlag = process.env.ROTIFER_TELEMETRY;
     delete process.env.ROTIFER_TELEMETRY;
-    vi.resetModules();
+
+    logged = [];
+    globalThis.fetch = vi.fn(async (url: any, init: any) => {
+      if (String(url).includes("log_mcp_call")) {
+        logged.push(JSON.parse(init.body));
+      }
+      return { ok: true, status: 201, json: async () => ({}), text: async () => "" } as any;
+    }) as any;
+
+    vi.mocked(runGene).mockReset();
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
     if (originalFlag === undefined) delete process.env.ROTIFER_TELEMETRY;
     else process.env.ROTIFER_TELEMETRY = originalFlag;
-    vi.doUnmock("../../src/auth.js");
-    vi.doUnmock("../../src/local.js");
-    vi.restoreAllMocks();
   });
 
   /**
@@ -80,42 +99,34 @@ describe("mcp_call_log records the outcome, not the control flow", () => {
    * from it — which is exactly why it used to be logged as a success.
    */
   it("logs success=false when a gene runs and fails", async () => {
-    const { client, logged, cleanup } = await serverWithCapturedLogs({
+    vi.mocked(runGene).mockReturnValue({
       success: false,
       exitCode: 1,
       stdout: "",
       stderr: "gene threw",
     });
 
-    try {
-      await client.callTool({ name: "run_gene", arguments: { gene_name: "broken" } });
-      await vi.waitFor(() => expect(logged.length).toBeGreaterThan(0));
+    await client.callTool({ name: "run_gene", arguments: { gene_name: "broken" } });
+    await vi.waitFor(() => expect(logged.length).toBeGreaterThan(0));
 
-      const entry = logged.find((e) => e.p_tool_name === "run_gene");
-      expect(entry).toBeDefined();
-      expect(entry!.p_success).toBe(false);
-    } finally {
-      await cleanup();
-    }
+    const entry = logged.find((e) => e.p_tool_name === "run_gene");
+    expect(entry).toBeDefined();
+    expect(entry!.p_success).toBe(false);
   });
 
   it("logs success=true when the same call succeeds", async () => {
-    const { client, logged, cleanup } = await serverWithCapturedLogs({
+    vi.mocked(runGene).mockReturnValue({
       success: true,
       exitCode: 0,
       stdout: "{}",
       stderr: "",
     });
 
-    try {
-      await client.callTool({ name: "run_gene", arguments: { gene_name: "working" } });
-      await vi.waitFor(() => expect(logged.length).toBeGreaterThan(0));
+    await client.callTool({ name: "run_gene", arguments: { gene_name: "working" } });
+    await vi.waitFor(() => expect(logged.length).toBeGreaterThan(0));
 
-      const entry = logged.find((e) => e.p_tool_name === "run_gene");
-      expect(entry!.p_success).toBe(true);
-    } finally {
-      await cleanup();
-    }
+    const entry = logged.find((e) => e.p_tool_name === "run_gene");
+    expect(entry!.p_success).toBe(true);
   });
 
   /**
@@ -125,21 +136,17 @@ describe("mcp_call_log records the outcome, not the control flow", () => {
    * invocation record with it.
    */
   it("still records the invocation for a failed run", async () => {
-    const { client, logged, cleanup } = await serverWithCapturedLogs({
+    vi.mocked(runGene).mockReturnValue({
       success: false,
       exitCode: 1,
       stdout: "",
       stderr: "boom",
     });
 
-    try {
-      await client.callTool({ name: "run_gene", arguments: { gene_name: "broken" } });
-      await vi.waitFor(() => expect(logged.length).toBeGreaterThan(0));
+    await client.callTool({ name: "run_gene", arguments: { gene_name: "broken" } });
+    await vi.waitFor(() => expect(logged.length).toBeGreaterThan(0));
 
-      const call = logged.find((e) => e.p_tool_name === "run_gene");
-      expect(call!.p_success).toBe(false);
-    } finally {
-      await cleanup();
-    }
+    const call = logged.find((e) => e.p_tool_name === "run_gene");
+    expect(call!.p_success).toBe(false);
   });
 });
