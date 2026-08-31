@@ -1,7 +1,34 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../../src/server.js";
+
+/**
+ * publishGene (and runGene, agentRun, etc.) are re-exported from local.js
+ * through tools.js and shell out to the real `rotifer` CLI via spawnSync —
+ * `which rotifer`, falling back to `npx -y @rotifer/playground` when it
+ * isn't on PATH. Nothing here mocked that, so "no args" and "invalid gene
+ * name" below were racing a REAL subprocess (spawnSync's own 120s timeout)
+ * against this suite's 15s testTimeout — a real network fetch (a cold npx
+ * cache, a slow registry, contention from other test files' own real
+ * subprocesses running concurrently) had a genuine chance of losing that
+ * race, surfacing as a timeout rather than an assertion failure. Confirmed
+ * by hand, 2026-08-31: this is the shape of two of this file's reported
+ * flaky cases. Mocked the same way tests/integration/call-log-outcome.test.ts
+ * already mocks runGene, so every call in this file is now fully in-process.
+ */
+vi.mock("../../src/local.js", async () => {
+  const actual = await vi.importActual<typeof import("../../src/local.js")>("../../src/local.js");
+  return {
+    ...actual,
+    publishGene: vi.fn(() => ({
+      success: true,
+      exitCode: 0,
+      stdout: "mock publish output",
+      stderr: "",
+    })),
+  };
+});
 
 let client: Client;
 let cleanup: () => Promise<void>;
