@@ -3,6 +3,7 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./server.js";
 import { getVersionInfo, getPackageVersion } from "./version.js";
+import { flushInvocationReports } from "./cloud.js";
 
 async function notifyVersionOnStderr(): Promise<void> {
   if (process.env.CI || process.env.NO_UPDATE_NOTIFIER || process.env.ROTIFER_NO_UPDATE_CHECK) return;
@@ -55,6 +56,26 @@ async function main() {
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // A long-lived host (Claude Code, Cursor) never needs this — an unawaited
+  // open request keeps Node's event loop alive on its own until it settles,
+  // the same way playground's CLI does when a command simply returns. What
+  // this covers is an explicit kill(): SIGTERM's default action is immediate
+  // termination, and installing a handler is the only way to get a chance to
+  // flush first. This was the exact repro (2026-08-30): a diagnostic script
+  // called run_gene, got its response, and child.kill()'d the process right
+  // after — the in-flight §33.4 report never landed, silently. Bounded by
+  // flushInvocationReports()'s own FLUSH_TIMEOUT_MS, so a stalled endpoint
+  // delays shutdown by a few seconds at most, never indefinitely.
+  let shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    await flushInvocationReports();
+    process.exit(0);
+  };
+  process.on("SIGINT", () => void shutdown());
+  process.on("SIGTERM", () => void shutdown());
 }
 
 main().catch((err) => {
