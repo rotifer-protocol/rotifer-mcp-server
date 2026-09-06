@@ -133,3 +133,49 @@ describe("resources under a declared tool set", { timeout: 10000 }, () => {
     if (previous !== undefined) process.env.ROTIFER_MCP_TOOLS = previous;
   });
 });
+
+// initialize advertises `resources: {}`, which is a claim about the whole
+// resource method family, not just the half of it this server happened to
+// implement. `resources/templates/list` answering while `resources/list`
+// returns "Method not found" is the shape that hid the gap (#120): probed from
+// either end it looks fine, and only a client doing ordinary discovery — which
+// calls resources/list first — trips over it.
+//
+// Every one of this server's resources is templated, so the concrete list is
+// legitimately empty. Empty is an answer; an error is not.
+describe("resources/list under the declared resources capability", { timeout: 10000 }, () => {
+  it("answers instead of erroring with Method not found", async () => {
+    const { resources } = await client.listResources();
+    expect(Array.isArray(resources)).toBe(true);
+  });
+
+  it("is empty, because every resource this server exposes is templated", async () => {
+    const [{ resources }, { resourceTemplates }] = await Promise.all([
+      client.listResources(),
+      client.listResourceTemplates(),
+    ]);
+    expect(resources).toEqual([]);
+    // The control: an empty list only means "nothing concrete to list" if the
+    // templates are in fact there. Both empty would mean the server went dark.
+    expect(resourceTemplates.length).toBeGreaterThan(0);
+  });
+
+  it("still answers under a narrowed tool set", async () => {
+    const previous = process.env.ROTIFER_MCP_TOOLS;
+    process.env.ROTIFER_MCP_TOOLS = "evolve";
+    const server = createServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    const c = new Client({ name: "test-client", version: "1.0.0" });
+    await c.connect(clientTransport);
+    try {
+      const { resources } = await c.listResources();
+      expect(resources).toEqual([]);
+    } finally {
+      await c.close();
+      await server.close();
+      if (previous === undefined) delete process.env.ROTIFER_MCP_TOOLS;
+      else process.env.ROTIFER_MCP_TOOLS = previous;
+    }
+  });
+});
