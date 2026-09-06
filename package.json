@@ -2,7 +2,7 @@
   "name": "@rotifer/mcp-server",
   "version": "0.18.0",
   "mcpName": "io.github.rotifer-protocol/mcp-server",
-  "description": "Rotifer MCP Server — AI agents search, compare, and rank Genes (modular AI skills) from a living ecosystem of 50+ capabilities. Zero config.",
+  "description": "Rotifer MCP Server \u2014 AI agents search, compare, and rank Genes (modular AI skills) from a living ecosystem of 50+ capabilities. Zero config.",
   "type": "module",
   "bin": {
     "mcp-server": "./dist/index.js",
@@ -52,7 +52,8 @@
   },
   "overrides": {
     "qs": "^6.15.2",
-    "hono": "^4.12.26"
+    "hono": "^4.12.26",
+    "fast-uri": "^3.1.7"
   },
   "engines": {
     "node": ">=20"
