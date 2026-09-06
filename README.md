@@ -311,6 +311,35 @@ One snapshot per Gene: the next overwrite of that Gene supersedes it, and a
 rollback consumes it. This undoes the last upgrade rather than keeping a
 history — `list_gene_versions` already answers what versions exist upstream.
 
+### Keeping the server up to date
+
+The server has always told you when it was behind — a line on stderr at startup,
+once a day. `self-update` is the other half:
+
+```bash
+rotifer-mcp-server self-update              # check, verify, install
+rotifer-mcp-server self-update --rollback   # back to the version it replaced
+```
+
+It refuses any version npm has no [provenance
+attestation](https://docs.npmjs.com/generating-provenance-statements) for — this
+package publishes from CI with `--provenance`, so an unattested build is not one
+this project released.
+
+Two things worth knowing:
+
+- **A running server keeps serving the old code.** Installing replaces files on
+  disk; it does not replace the process your editor is already talking to.
+  Restart your MCP host afterwards.
+- **If you launch through `npx`, there is nothing to update.** An unpinned `npx
+  @rotifer/mcp-server` re-resolves the latest published version on every run, so
+  `self-update` says so and stops rather than installing a global copy that
+  would shadow it.
+
+This is a command you run, not a tool the model can call. Updating means a
+global install, and a tool could not even report the result honestly — the model
+would say "updated" while still being served by the old process.
+
 ### Usage reporting
 
 When you are **signed in**, each tool call reports a usage record to Rotifer

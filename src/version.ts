@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-function getConfigDir(): string {
+export function getConfigDir(): string {
   return process.env.ROTIFER_CONFIG_DIR || join(homedir(), ".config", "rotifer");
 }
 
@@ -26,7 +26,7 @@ export function getPackageVersion(): string {
   return pkg.version;
 }
 
-function compareSemver(a: string, b: string): number {
+export function compareSemver(a: string, b: string): number {
   const pa = a.split(".").map(Number);
   const pb = b.split(".").map(Number);
   for (let i = 0; i < 3; i++) {
@@ -53,7 +53,10 @@ function writeCache(cache: UpdateCache): void {
   } catch { /* non-critical */ }
 }
 
-async function fetchLatestVersion(): Promise<string | null> {
+/** A live registry lookup, bypassing the 24h cache in getVersionInfo().
+ *  `self-update` needs the truth at the moment the user asked, not a cached
+ *  answer from yesterday. */
+export async function fetchLatestVersion(): Promise<string | null> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);

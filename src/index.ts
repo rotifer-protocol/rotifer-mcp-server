@@ -38,6 +38,12 @@ async function main() {
     return;
   }
 
+  if (subcommand === "self-update") {
+    const { runSelfUpdate } = await import("./self-update.js");
+    await runSelfUpdate({ isRollback: process.argv.includes("--rollback") });
+    return;
+  }
+
   if (subcommand === "serve") {
     const { startHttpServer } = await import("./http.js");
     const portIdx = process.argv.indexOf("--port");
