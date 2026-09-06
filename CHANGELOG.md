@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.18.0...v0.19.0) (2026-09-06)
+
+
+### Features
+
+* **self-update:** add a `self-update` subcommand ([#130](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/130)) ([4b31717](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/4b31717ae1067b7576b803545ce31222561484bd))
+
+
+### Bug Fixes
+
+* **cloud:** give logGeneInvocation a chance to land before the process dies ([#128](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/128)) ([c17b3f3](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/c17b3f3fd11d75d69415b1e293ad36d2cd2d0c0a))
+* **deps:** pin fast-uri &gt;= 3.1.7 to clear the high-severity SSRF advisories ([#131](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/131)) ([70847a0](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/70847a0b3934f1b502e8ed4c6e862db9e94225c7))
+
 ## [0.18.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.17.0...v0.18.0) (2026-08-30)
 
 
