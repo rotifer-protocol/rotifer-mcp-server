@@ -22,7 +22,11 @@ describe("loadCloudConfig", () => {
     const { loadCloudConfig } = await import("../../src/cloud.js");
     const config = loadCloudConfig();
     expect(config.endpoint).toBe("https://cloud.rotifer.dev");
-    expect(config.anonKey).toBe("");
+    // Was `toBe("")`. That expectation encoded the bug: with no key, every
+    // Cloud call fails the same way a rejected one does, and because reporting
+    // is fire-and-forget the failure is invisible. A fresh install now gets the
+    // shipped publishable key, so cloud commands work out of the box.
+    expect(config.anonKey.startsWith("sb_")).toBe(true);
   });
 
   it("reads from cloud.json when it exists", async () => {
@@ -72,7 +76,9 @@ describe("loadCloudConfig", () => {
     const { loadCloudConfig } = await import("../../src/cloud.js");
     const config = loadCloudConfig();
     expect(config.endpoint).toBe("https://partial.example.com");
-    expect(config.anonKey).toBe("");
+    // Same correction: a config file that names only an endpoint leaves the key
+    // to the shipped default rather than to an empty string.
+    expect(config.anonKey.startsWith("sb_")).toBe(true);
   });
 
   it("caches config across calls (same reference)", async () => {
@@ -82,5 +88,27 @@ describe("loadCloudConfig", () => {
     const first = loadCloudConfig();
     const second = loadCloudConfig();
     expect(first).toBe(second);
+  });
+});
+
+describe("loadCloudConfig — a stale legacy key in cloud.json must not win", () => {
+  it("ignores the legacy key the file carries and resolves a usable one", async () => {
+    const fs = await import("node:fs");
+    vi.mocked(fs.existsSync).mockImplementation((p: any) => String(p).endsWith("cloud.json"));
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        endpoint: "https://cloud.rotifer.dev",
+        // What every machine that used the CLI before the key migration still
+        // has on disk. Presenting it returns 401 "Legacy API keys are disabled".
+        anonKey: "eyJ_NOT_A_REAL_JWT_stale_from_file",
+      }),
+    );
+    const { loadCloudConfig } = await import("../../src/cloud.js");
+    const config = loadCloudConfig();
+    expect(config.anonKey.startsWith("eyJ")).toBe(false);
+    expect(config.anonKey.startsWith("sb_")).toBe(true);
+    // The endpoint from the file is still honoured — only the dead key is
+    // replaced, not the whole file.
+    expect(config.endpoint).toBe("https://cloud.rotifer.dev");
   });
 });
