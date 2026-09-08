@@ -28,6 +28,45 @@ interface CloudConfig {
   anonKey: string;
 }
 
+/**
+ * The project's publishable anon key. Public by design — it ships in the
+ * package, is protected by RLS, and grants nothing a reader could not already
+ * do. Kept in step with @rotifer/playground's DEFAULT_CLOUD_ANON_KEY.
+ */
+const DEFAULT_CLOUD_ANON_KEY = "sb_publishable_6aCznk-jn2QIQcN3QZobKg_3r9C-wzk";
+
+/**
+ * Supabase's legacy API keys are signed JWTs and begin "eyJ". The Cloud
+ * project has them disabled: presenting one now returns
+ * `401 Legacy API keys are disabled`.
+ *
+ * That matters here because ~/.rotifer/cloud.json outlives the migration.
+ * Anyone who used the CLI before it still has a legacy key sitting in that
+ * file, and this loader used to take it verbatim.
+ */
+export function isLegacyJwtKey(key: string | undefined): boolean {
+  return typeof key === "string" && key.startsWith("eyJ");
+}
+
+/**
+ * First configured key that is not a disabled legacy one, else the shipped
+ * default. @rotifer/playground gained this in its PR #336; the same stale file
+ * reaches this package and the fix was never ported, which is what broke the
+ * invocation pipeline: every report is fire-and-forget, so the 401 was
+ * swallowed and `gene_invocation_log` simply stayed empty. The dashboard read
+ * a true zero and correctly called the pipeline dead — nothing was writing to
+ * it.
+ */
+export function resolveAnonKey(
+  fromConfigFile: string | undefined,
+  fromEnv: string | undefined,
+): string {
+  for (const candidate of [fromConfigFile, fromEnv]) {
+    if (candidate && !isLegacyJwtKey(candidate)) return candidate;
+  }
+  return DEFAULT_CLOUD_ANON_KEY;
+}
+
 let _cachedConfig: CloudConfig | null = null;
 
 export function loadCloudConfig(): CloudConfig {
@@ -39,7 +78,7 @@ export function loadCloudConfig(): CloudConfig {
       const file = JSON.parse(readFileSync(configPath, "utf-8")) as Partial<CloudConfig>;
       _cachedConfig = {
         endpoint: file.endpoint || process.env.ROTIFER_CLOUD_ENDPOINT || "https://cloud.rotifer.dev",
-        anonKey: file.anonKey || process.env.ROTIFER_CLOUD_ANON_KEY || "",
+        anonKey: resolveAnonKey(file.anonKey, process.env.ROTIFER_CLOUD_ANON_KEY),
       };
       return _cachedConfig;
     } catch {
@@ -48,7 +87,7 @@ export function loadCloudConfig(): CloudConfig {
   }
   _cachedConfig = {
     endpoint: process.env.ROTIFER_CLOUD_ENDPOINT || "https://cloud.rotifer.dev",
-    anonKey: process.env.ROTIFER_CLOUD_ANON_KEY || "",
+    anonKey: resolveAnonKey(undefined, process.env.ROTIFER_CLOUD_ANON_KEY),
   };
   return _cachedConfig;
 }
