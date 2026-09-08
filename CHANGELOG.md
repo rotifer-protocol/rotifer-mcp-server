@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.1](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.0...v0.19.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* **cloud:** stop sending the disabled legacy anon key, which silenced the invocation pipeline ([#133](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/133)) ([f121e4b](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/f121e4b3d2bcd5f3a14a3294c5ed72ed866490bd))
+
 ## [0.19.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.18.0...v0.19.0) (2026-09-06)
 
 
