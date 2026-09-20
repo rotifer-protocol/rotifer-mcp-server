@@ -2,6 +2,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
@@ -752,6 +753,15 @@ export function createServer(): Server {
       return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
     }
   });
+
+  // Declaring the `resources` capability above is a claim about the method
+  // family, not about the half of it that happens to be implemented. Every
+  // resource this server exposes is templated, so the concrete list is
+  // legitimately empty — but empty is an answer a client can act on, and
+  // "Method not found" is not: ordinary discovery calls resources/list first
+  // and would give up on resources entirely before ever reaching the templates
+  // below (#120).
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [] }));
 
   // Resources travel with the tools they duplicate: a declared set that left
   // these open would still hand over gene statistics, creator profiles and the
