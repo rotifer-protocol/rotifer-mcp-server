@@ -1,0 +1,80 @@
+name: Playground Pin Drift
+
+# `src/local.ts` pins the `@rotifer/playground` version that `rotiferCmd`
+# falls back to when no `rotifer` binary is on PATH. A unit test proves the
+# pin is exact; nothing in CI can notice that npm has moved on. That gap is
+# the known failure mode of pinning: the rotifer-playground repository sat
+# a full minor behind its own mcp-server pin for over a week before anyone
+# looked.
+#
+# This job compares the pin against the npm dist-tag once a week and opens
+# (or refreshes) one standing issue when they differ. It deliberately does
+# NOT open a PR: a bump is a decision about which CLI release the server
+# vouches for, and an auto-PR would make the easy half of that look like
+# the whole job.
+
+on:
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    name: Pinned vs npm latest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Compare
+        id: compare
+        run: |
+          PINNED="$(sed -n 's/.*PLAYGROUND_FALLBACK_SPEC = "@rotifer\/playground@\([0-9][0-9.]*\)".*/\1/p' src/local.ts | head -1)"
+          if [ -z "$PINNED" ]; then
+            echo "::error::PLAYGROUND_FALLBACK_SPEC not found in src/local.ts — this watcher is watching nothing"
+            exit 1
+          fi
+          LATEST="$(npm view @rotifer/playground version)"
+          echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "  pinned: $PINNED"
+          echo "  latest: $LATEST"
+          if [ "$PINNED" = "$LATEST" ]; then
+            echo "in_sync=true" >> "$GITHUB_OUTPUT"
+            echo "in sync"
+          else
+            echo "in_sync=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::pinned $PINNED but npm latest is $LATEST"
+          fi
+
+      # One standing issue, refreshed in place — a weekly duplicate per drift
+      # week would train everyone to ignore it.
+      - name: Open or refresh the drift issue
+        if: steps.compare.outputs.in_sync == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PINNED: ${{ steps.compare.outputs.pinned }}
+          LATEST: ${{ steps.compare.outputs.latest }}
+        run: |
+          TITLE="Playground fallback pin has drifted behind npm"
+          BODY="$(cat <<TXT
+          \`PLAYGROUND_FALLBACK_SPEC\` in \`src/local.ts\` pins
+          \`@rotifer/playground@${PINNED}\`, but npm latest is \`${LATEST}\`.
+
+          Bumping means: review what changed in the CLI between the two
+          versions, move the constant, and let \`tests/unit/local-ops.test.ts\`
+          confirm the spawned command still carries an exact version.
+
+          Refreshed automatically by \`.github/workflows/playground-pin-drift.yml\`.
+          TXT
+          )"
+          EXISTING="$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number // empty')"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "Still drifted: pinned \`$PINNED\`, npm latest \`$LATEST\` ($(date -u +%F))."
+            echo "refreshed issue #$EXISTING"
+          else
+            gh issue create --title "$TITLE" --body "$BODY"
+          fi
