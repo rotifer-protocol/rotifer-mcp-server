@@ -364,6 +364,19 @@ export function setSpawnedCliChannel(channel: string | null): void {
   spawnedCliChannel = channel;
 }
 
+/**
+ * The CLI package `rotiferCmd` falls back to when no `rotifer` binary is on
+ * PATH. Pinned on purpose: an unversioned `npx -y @rotifer/playground` runs
+ * whatever the registry serves at that moment, so the code that executed
+ * would not be the code anyone reviewed. ClawHub's reviewer flagged exactly
+ * that on the self-evolving-agent Skill (2026-10-12), whose `run-agent`
+ * command reaches this line.
+ *
+ * `.github/workflows/playground-pin-drift.yml` compares this pin to npm
+ * latest weekly and keeps one issue open while they differ.
+ */
+export const PLAYGROUND_FALLBACK_SPEC = "@rotifer/playground@0.26.1";
+
 function rotiferCmd(args: string[], cwd?: string): ShellResult {
   const bin = resolveRotiferBin();
   // Tell the spawned CLI which entry point it is really serving. Without this
@@ -377,8 +390,9 @@ function rotiferCmd(args: string[], cwd?: string): ShellResult {
   const extraEnv = spawnedCliChannel ? { ROTIFER_INVOCATION_CHANNEL: spawnedCliChannel } : undefined;
   if (bin === "npx") {
     // The bare "rotifer" name is unclaimed on npm; invoking it via npx would
-    // execute whatever package squats that name. Always pin the scoped package.
-    return shellExec("npx", ["-y", "@rotifer/playground", ...args], cwd, extraEnv);
+    // execute whatever package squats that name. Always name the scoped
+    // package, at an exact version (see PLAYGROUND_FALLBACK_SPEC).
+    return shellExec("npx", ["-y", PLAYGROUND_FALLBACK_SPEC, ...args], cwd, extraEnv);
   }
   return shellExec(bin, args, cwd, extraEnv);
 }
