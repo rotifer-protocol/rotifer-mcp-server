@@ -22,6 +22,7 @@ vi.mock("node:crypto", async () => {
 });
 
 import {
+  PLAYGROUND_FALLBACK_SPEC,
   agentRun,
   compileGene,
   createLocalAgent,
@@ -213,7 +214,7 @@ describe("shell-backed local commands", () => {
     expect(vi.mocked(spawnSync)).toHaveBeenNthCalledWith(
       2,
       "npx",
-      ["-y", "@rotifer/playground", "agent", "run", "demo-agent", "--input", "hello", "--isVerbose", "--no-sandbox"],
+      ["-y", PLAYGROUND_FALLBACK_SPEC,"agent", "run", "demo-agent", "--input", "hello", "--isVerbose", "--no-sandbox"],
       expect.objectContaining({ cwd: "/project" }),
     );
   });
@@ -229,7 +230,29 @@ describe("shell-backed local commands", () => {
     for (const [command, args] of vi.mocked(spawnSync).mock.calls) {
       if (command !== "npx") continue;
       expect((args as string[])[0]).not.toBe("rotifer");
-      expect(args).toContain("@rotifer/playground");
+      expect(args).toContain(PLAYGROUND_FALLBACK_SPEC);
+    }
+  });
+
+  it("pins the npx fallback to an exact @rotifer/playground version", () => {
+    // An unversioned spec runs whatever npm serves at that moment — the code
+    // that executed would not be the code anyone reviewed. ClawHub's reviewer
+    // flagged exactly that on the self-evolving-agent Skill (2026-10-12).
+    const exact = /^@rotifer\/playground@\d+\.\d+\.\d+$/;
+    expect(PLAYGROUND_FALLBACK_SPEC).toMatch(exact);
+
+    mockSpawnSequence(
+      { status: 1, stdout: "", stderr: "" },
+      { status: 0, stdout: "ok", stderr: "" },
+    );
+    runGene({ project_root: "/project", gene_name: "alpha" });
+
+    // Assert on what was actually spawned, not only on the constant, so a
+    // caller that bypasses the constant is caught too.
+    const npxCalls = vi.mocked(spawnSync).mock.calls.filter(([command]) => command === "npx");
+    expect(npxCalls.length).toBeGreaterThan(0);
+    for (const [, args] of npxCalls) {
+      expect((args as string[])[1]).toMatch(exact);
     }
   });
 
@@ -317,12 +340,12 @@ describe("shell-backed local commands", () => {
 
     const calls = vi.mocked(spawnSync).mock.calls.filter(([command]) => command !== "which");
     expect(calls.map(([command, args]) => [command, args])).toEqual([
-      ["npx", ["-y", "@rotifer/playground", "run", "alpha", "--input", "demo", "--verbose", "--no-sandbox", "--trust-unsigned"]],
-      ["npx", ["-y", "@rotifer/playground", "init", "alpha", "--fidelity", "Wrapped", "--domain", "search.web", "--no-genesis"]],
-      ["npx", ["-y", "@rotifer/playground", "scan", "genes", "--skills", "--skills-path", "skills"]],
-      ["npx", ["-y", "@rotifer/playground", "wrap", "alpha", "--domain", "search.web", "--fidelity", "Wrapped", "--from-skill", "skill-id", "--from-clawhub", "clawhub-id"]],
-      ["npx", ["-y", "@rotifer/playground", "test", "alpha", "--verbose", "--compliance"]],
-      ["npx", ["-y", "@rotifer/playground", "publish", "--all", "--skip-arena", "--description", "desc", "--changelog", "changes", "--skip-security"]],
+      ["npx", ["-y", PLAYGROUND_FALLBACK_SPEC,"run", "alpha", "--input", "demo", "--verbose", "--no-sandbox", "--trust-unsigned"]],
+      ["npx", ["-y", PLAYGROUND_FALLBACK_SPEC,"init", "alpha", "--fidelity", "Wrapped", "--domain", "search.web", "--no-genesis"]],
+      ["npx", ["-y", PLAYGROUND_FALLBACK_SPEC,"scan", "genes", "--skills", "--skills-path", "skills"]],
+      ["npx", ["-y", PLAYGROUND_FALLBACK_SPEC,"wrap", "alpha", "--domain", "search.web", "--fidelity", "Wrapped", "--from-skill", "skill-id", "--from-clawhub", "clawhub-id"]],
+      ["npx", ["-y", PLAYGROUND_FALLBACK_SPEC,"test", "alpha", "--verbose", "--compliance"]],
+      ["npx", ["-y", PLAYGROUND_FALLBACK_SPEC,"publish", "--all", "--skip-arena", "--description", "desc", "--changelog", "changes", "--skip-security"]],
     ]);
   });
 });
