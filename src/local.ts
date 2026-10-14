@@ -395,7 +395,7 @@ export function agentRun(options: {
   if (options.input) {
     args.push("--input", options.input);
   }
-  if (options.verbose) args.push("--isVerbose");
+  if (options.verbose) args.push("--verbose");
   if (options.no_sandbox) args.push("--no-sandbox");
   return rotiferCmd(args, root);
 }

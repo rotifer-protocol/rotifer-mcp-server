@@ -213,7 +213,10 @@ describe("shell-backed local commands", () => {
     expect(vi.mocked(spawnSync)).toHaveBeenNthCalledWith(
       2,
       "npx",
-      ["-y", "@rotifer/playground", "agent", "run", "demo-agent", "--input", "hello", "--isVerbose", "--no-sandbox"],
+      // `--verbose`, not `--isVerbose`: the CLI defines only the former and rejects
+      // the latter as an unknown option, so `agent_run` with verbose on always failed.
+      // This assertion used to spell out `--isVerbose` and kept the bug green.
+      ["-y", "@rotifer/playground", "agent", "run", "demo-agent", "--input", "hello", "--verbose", "--no-sandbox"],
       expect.objectContaining({ cwd: "/project" }),
     );
   });
