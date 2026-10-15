@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.2](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.1...v0.19.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* **ci:** stop uploading to Quality Observatory with the service_role key ([#135](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/135)) ([409ca64](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/409ca64134f065d59ef2a65b2fd1d6820d23bf41))
+* **deps:** clear the MCP SDK, proxy-addr and other new advisories ([#139](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/139)) ([28c68c3](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/28c68c3e6daa470f2310b1ecc04bcc6b4e9f4f68))
+* **local:** pass --verbose, not --isVerbose, to `rotifer agent run` ([#138](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/138)) ([590943c](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/590943c2e35c7ee92f8f2bfd0b054b0126700f8b))
+* **mcp:** answer resources/list instead of erroring Method not found ([#132](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/132)) ([d28dfcd](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/d28dfcdffa1eb3f5416169799e49fbdee957f3a6)), closes [#120](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/120)
+
 ## [0.19.1](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.0...v0.19.1) (2026-09-08)
 
 
