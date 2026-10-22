@@ -681,7 +681,7 @@ export function createServer(): Server {
         case "vg_scan":
           result = vgScan(args as any); break;
         default:
-          logMcpCall({ tool_name: name, success: false, latency_ms: Date.now() - startMs, caller: loadCredentials()?.user?.id ?? null });
+          logMcpCall({ tool_name: name, success: false, latency_ms: Date.now() - startMs });
           throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}. Use ListTools to see available tools.`);
       }
 
@@ -698,7 +698,6 @@ export function createServer(): Server {
         gene_id: geneId,
         success: didSucceed,
         latency_ms: Date.now() - startMs,
-        caller: callerId,
       });
 
       if (name === "run_gene" && callerId && geneId) {
@@ -748,7 +747,6 @@ export function createServer(): Server {
         gene_id: extractGeneId(name, (args || {}) as Record<string, unknown>),
         success: false,
         latency_ms: Date.now() - startMs,
-        caller: loadCredentials()?.user?.id ?? null,
       });
       return { content: [{ type: "text", text: `Error: ${error.message}` }], isError: true };
     }
