@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  listen: vi.fn((_port: number, callback?: () => void) => callback?.()),
+  listen: vi.fn((_port: number, _host: string, callback?: () => void) => callback?.()),
+  transportOptions: vi.fn(),
   close: vi.fn(),
   transportClose: vi.fn(),
   transportHandleRequest: vi.fn(),
@@ -31,7 +32,9 @@ vi.mock("@modelcontextprotocol/sdk/server/streamableHttp.js", () => ({
 
     close = mocks.transportClose;
 
-    constructor(_options: unknown) {}
+    constructor(options: unknown) {
+      mocks.transportOptions(options);
+    }
   },
 }));
 
@@ -72,10 +75,10 @@ beforeEach(() => {
 });
 
 describe("startHttpServer", () => {
-  it("starts the HTTP server on the requested port", async () => {
+  it("starts the HTTP server on the requested port, on loopback by default", async () => {
     await startHttpServer({ port: 3456 });
 
-    expect(mocks.listen).toHaveBeenCalledWith(3456, expect.any(Function));
+    expect(mocks.listen).toHaveBeenCalledWith(3456, "127.0.0.1", expect.any(Function));
     expect(process.on).toHaveBeenCalledWith("SIGINT", expect.any(Function));
     expect(process.on).toHaveBeenCalledWith("SIGTERM", expect.any(Function));
   });
@@ -162,6 +165,10 @@ describe("startHttpServer", () => {
 
     expect(mocks.serverConnect).toHaveBeenCalledTimes(1);
     expect(mocks.transportHandleRequest).toHaveBeenCalledTimes(1);
+    // GHSA-46jr-4wx8-v453: the SDK's 4 MiB default is the vulnerable bound.
+    expect(mocks.transportOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ maxRequestBodySize: 256 * 1024 }),
+    );
 
     response.emitClose();
     expect(mocks.transportClose).toHaveBeenCalledTimes(1);
@@ -189,5 +196,20 @@ describe("startHttpServer", () => {
     expect(response.end).toHaveBeenCalledWith(
       JSON.stringify({ error: "Internal server error" }),
     );
+  });
+
+  it("listens on another address only when asked, and warns that it is reachable", async () => {
+    await startHttpServer({ port: 3456, host: "0.0.0.0" });
+
+    expect(mocks.listen).toHaveBeenCalledWith(3456, "0.0.0.0", expect.any(Function));
+    const said = vi.mocked(console.error).mock.calls.map((c) => String(c[0])).join("\n");
+    expect(said).toMatch(/listening on 0\.0\.0\.0, so other machines can reach this server/);
+  });
+
+  it("does not warn on loopback", async () => {
+    await startHttpServer({ port: 3456 });
+
+    const said = vi.mocked(console.error).mock.calls.map((c) => String(c[0])).join("\n");
+    expect(said).not.toMatch(/other machines can reach/);
   });
 });

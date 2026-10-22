@@ -48,8 +48,16 @@ async function main() {
     const { startHttpServer } = await import("./http.js");
     const portIdx = process.argv.indexOf("--port");
     const port = portIdx !== -1 ? parseInt(process.argv[portIdx + 1], 10) : undefined;
+    // Loopback by default; `--host 0.0.0.0` (or an interface address) to
+    // listen beyond this machine. See DEFAULT_HOST in http.ts.
+    const hostIdx = process.argv.indexOf("--host");
+    const host = hostIdx !== -1 ? process.argv[hostIdx + 1] : undefined;
+    if (hostIdx !== -1 && (!host || host.startsWith("--"))) {
+      console.error("serve: --host needs an address, e.g. --host 0.0.0.0");
+      process.exit(2);
+    }
     notifyVersionOnStderr();
-    await startHttpServer({ port });
+    await startHttpServer({ port, host });
     return;
   }
 
