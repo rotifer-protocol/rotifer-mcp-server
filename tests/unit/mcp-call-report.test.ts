@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 /**
- * logMcpCall reports with the signed-in user's token (T-74): the registry
+ * logMcpCall and logGeneInvocation report with the signed-in user's token
+ * (T-74): the registry
  * records the caller from the token and no longer counts a report without
  * one. So the token has to be there, renewed when it has expired, and a
  * sign-in that cannot be renewed has to be said out loud rather than leave
@@ -214,5 +215,91 @@ describe("logMcpCall reports with the user's token", () => {
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 });
     expect(() => logMcpCall({ tool_name: "get_gene_detail", success: true, latency_ms: 50 })).not.toThrow();
     await settle();
+  });
+});
+
+describe("logGeneInvocation (run_gene) uses the same renewed sign-in", () => {
+  let originalFetch: typeof globalThis.fetch;
+  let originalFlag: string | undefined;
+  let stderr: ReturnType<typeof vi.spyOn>;
+  const invocations = (calls: Call[]) => calls.filter((c) => c.url.includes("/rpc/log_gene_invocation"));
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    originalFlag = process.env.ROTIFER_TELEMETRY;
+    delete process.env.ROTIFER_TELEMETRY;
+    auth.current = null;
+    auth.stored = null;
+    auth.saved = [];
+    stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    if (originalFlag === undefined) delete process.env.ROTIFER_TELEMETRY;
+    else process.env.ROTIFER_TELEMETRY = originalFlag;
+    vi.restoreAllMocks();
+  });
+
+  it("renews an expired token and reports the run under the account — it used to send nothing", async () => {
+    auth.stored = expired();
+    const { fn, calls } = fakeFetch();
+    globalThis.fetch = fn;
+
+    const { logGeneInvocation, flushInvocationReports } = await import("../../src/cloud.js");
+    logGeneInvocation("gene-1", "mcp:dsh");
+    await flushInvocationReports(2_000);
+
+    expect(renewals(calls)).toHaveLength(1);
+    expect(invocations(calls)).toHaveLength(1);
+    const [report] = invocations(calls);
+    expect(report.url).toContain("/rpc/log_gene_invocation_v2");
+    expect(report.init.headers.Authorization).toBe("Bearer token-new");
+    expect(JSON.parse(report.init.body)).toMatchObject({ p_gene_id: "gene-1", p_caller_agent_id: "user-123", p_client_channel: "mcp:dsh" });
+  });
+
+  it("says once, shared with logMcpCall, when the sign-in cannot be renewed", async () => {
+    auth.stored = expired();
+    const { fn, calls } = fakeFetch({ refresh: { status: 400 } });
+    globalThis.fetch = fn;
+
+    const { logGeneInvocation, logMcpCall, flushInvocationReports } = await import("../../src/cloud.js");
+    logGeneInvocation("gene-1", "mcp:dsh");
+    await flushInvocationReports(2_000);
+    logMcpCall({ tool_name: "run_gene", gene_id: "gene-1", success: true, latency_ms: 1 });
+    await settle();
+
+    expect(invocations(calls)).toHaveLength(0);
+    expect(reports(calls)).toHaveLength(0);
+    expect(stderr).toHaveBeenCalledTimes(1);
+    expect(String(stderr.mock.calls[0][0])).toMatch(/gene runs are not being counted.*rotifer login/);
+  });
+
+  it("says so when the registry rejects the token, instead of only under ROTIFER_DEBUG", async () => {
+    auth.current = auth.stored = valid();
+    const { fn, calls } = fakeFetch({ report: { status: 401 } });
+    globalThis.fetch = fn;
+
+    const { logGeneInvocation, flushInvocationReports } = await import("../../src/cloud.js");
+    logGeneInvocation("gene-1");
+    await flushInvocationReports(2_000);
+
+    expect(invocations(calls)).toHaveLength(1);
+    expect(stderr).toHaveBeenCalledTimes(1);
+    expect(String(stderr.mock.calls[0][0])).toMatch(/not being counted.*rotifer login/);
+  });
+
+  it("sends nothing, and renews nothing, when ROTIFER_TELEMETRY=0", async () => {
+    process.env.ROTIFER_TELEMETRY = "0";
+    auth.stored = expired();
+    const { fn, calls } = fakeFetch();
+    globalThis.fetch = fn;
+
+    const { logGeneInvocation } = await import("../../src/cloud.js");
+    logGeneInvocation("gene-1", "mcp:dsh");
+    await settle();
+
+    expect(calls).toHaveLength(0);
   });
 });

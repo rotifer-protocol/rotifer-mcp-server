@@ -1,8 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Every case names a caller unless it is testing the signed-out path: usage is
-// only reported for signed-in users now, so omitting it silently tests nothing.
+// Usage is only reported for signed-in users, and the caller is the account
+// behind the sign-in (T-74), so every case below runs signed in as SIGNED_IN.
 const SIGNED_IN = "user-123";
+
+vi.mock("../../src/auth.js", async () => {
+  const actual = await vi.importActual<typeof import("../../src/auth.js")>("../../src/auth.js");
+  return {
+    ...actual,
+    loadCredentials: () => ({ access_token: "tok", refresh_token: "r", expires_at: Date.now() + 3_600_000, user: { id: SIGNED_IN } }),
+    loadStoredCredentials: () => null,
+  };
+});
 
 // logMcpCall is covered in mcp-call-report.test.ts: it now reports with the
 // signed-in user's token rather than a caller argument (T-74).
@@ -30,7 +39,7 @@ describe("logGeneInvocation", () => {
     globalThis.fetch = mockFetch;
 
     const { logGeneInvocation } = await import("../../src/cloud.js");
-    logGeneInvocation("gene-1", SIGNED_IN);
+    logGeneInvocation("gene-1");
 
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
     const [url, opts] = mockFetch.mock.calls[0];
@@ -38,6 +47,7 @@ describe("logGeneInvocation", () => {
     const body = JSON.parse(opts.body);
     expect(body.p_gene_id).toBe("gene-1");
     expect(body.p_caller_agent_id).toBe(SIGNED_IN);
+    expect(opts.headers.Authorization).toBe("Bearer tok");
   });
 
   it("sends the channel through v2 when given one", async () => {
@@ -45,7 +55,7 @@ describe("logGeneInvocation", () => {
     globalThis.fetch = mockFetch;
 
     const { logGeneInvocation } = await import("../../src/cloud.js");
-    logGeneInvocation("gene-1", SIGNED_IN, "mcp:dsh");
+    logGeneInvocation("gene-1", "mcp:dsh");
 
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
     const [url, opts] = mockFetch.mock.calls[0];
@@ -62,7 +72,7 @@ describe("logGeneInvocation", () => {
     globalThis.fetch = mockFetch;
 
     const { logGeneInvocation } = await import("../../src/cloud.js");
-    logGeneInvocation("gene-1", SIGNED_IN);
+    logGeneInvocation("gene-1");
 
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
     const [url, opts] = mockFetch.mock.calls[0];
@@ -78,7 +88,7 @@ describe("logGeneInvocation", () => {
     globalThis.fetch = mockFetch;
 
     const { logGeneInvocation } = await import("../../src/cloud.js");
-    logGeneInvocation("gene-1", SIGNED_IN);
+    logGeneInvocation("gene-1");
 
     await new Promise((r) => setTimeout(r, 20));
     expect(mockFetch).not.toHaveBeenCalled();

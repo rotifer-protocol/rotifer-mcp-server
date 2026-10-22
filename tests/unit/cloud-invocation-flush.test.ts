@@ -52,7 +52,7 @@ describe("flushInvocationReports (MCP server)", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((res) => { release = res; })));
     const { logGeneInvocation, flushInvocationReports } = await import("../../src/cloud.js");
 
-    logGeneInvocation(CLOUD_ID, USER_ID, "mcp:cursor");
+    logGeneInvocation(CLOUD_ID, "mcp:cursor");
 
     let flushed = false;
     const flushing = flushInvocationReports(5000).then(() => { flushed = true; });
@@ -67,7 +67,7 @@ describe("flushInvocationReports (MCP server)", () => {
   it("gives up after the timeout rather than hanging shutdown forever", async () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => { /* never settles */ })));
     const { logGeneInvocation, flushInvocationReports } = await import("../../src/cloud.js");
-    logGeneInvocation(CLOUD_ID, USER_ID, "mcp:cursor");
+    logGeneInvocation(CLOUD_ID, "mcp:cursor");
     await expect(flushInvocationReports(30)).resolves.toBeUndefined();
   });
 
@@ -91,7 +91,7 @@ describe("flushInvocationReports (MCP server)", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { logGeneInvocation, FLUSH_TIMEOUT_MS } = await import("../../src/cloud.js");
 
-    logGeneInvocation(CLOUD_ID, USER_ID, "mcp:cursor");
+    logGeneInvocation(CLOUD_ID, "mcp:cursor");
     expect(capturedSignal).toBeInstanceOf(AbortSignal);
     expect(capturedSignal!.aborted).toBe(false);
 
@@ -104,7 +104,7 @@ describe("flushInvocationReports (MCP server)", () => {
   it("stops tracking a report once it settles", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
     const { logGeneInvocation, flushInvocationReports } = await import("../../src/cloud.js");
-    logGeneInvocation(CLOUD_ID, USER_ID, "mcp:cursor");
+    logGeneInvocation(CLOUD_ID, "mcp:cursor");
     // Let the fetch's .then/.finally chain actually run before asserting
     // nothing is left to wait for.
     await new Promise((r) => setTimeout(r, 0));
@@ -125,7 +125,7 @@ describe("flushInvocationReports (MCP server)", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
     const { logGeneInvocation } = await import("../../src/cloud.js");
 
-    logGeneInvocation(CLOUD_ID, USER_ID, "mcp:cursor");
+    logGeneInvocation(CLOUD_ID, "mcp:cursor");
     await new Promise((r) => setTimeout(r, 0));
     await new Promise((r) => setTimeout(r, 0));
 
@@ -140,7 +140,7 @@ describe("flushInvocationReports (MCP server)", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
     const { logGeneInvocation } = await import("../../src/cloud.js");
 
-    logGeneInvocation(CLOUD_ID, USER_ID, "mcp:cursor");
+    logGeneInvocation(CLOUD_ID, "mcp:cursor");
     await new Promise((r) => setTimeout(r, 0));
     await new Promise((r) => setTimeout(r, 0));
 
@@ -154,7 +154,7 @@ describe("flushInvocationReports (MCP server)", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
     const { logGeneInvocation, flushInvocationReports } = await import("../../src/cloud.js");
 
-    logGeneInvocation(CLOUD_ID, USER_ID, "mcp:cursor");
+    logGeneInvocation(CLOUD_ID, "mcp:cursor");
     await flushInvocationReports(1000);
 
     expect(stderrSpy).not.toHaveBeenCalled();

@@ -826,12 +826,28 @@ function warnReportingSignInOnce(message: string): void {
   process.stderr.write(`[rotifer] ${message}\n`);
 }
 
+const SIGN_IN_EXPIRED =
+  "Your Rotifer sign-in has expired and could not be renewed, so your MCP tool calls and gene runs are not being counted. Run `rotifer login` to sign in again.";
+const SIGN_IN_REJECTED =
+  "Rotifer Cloud did not accept your sign-in when recording usage, so your MCP tool calls and gene runs are not being counted. Run `rotifer login` to sign in again.";
+
 /** Renew a little before expiry, so a report does not race the deadline. */
 const RENEW_MARGIN_MS = 60_000;
 
 let renewing: Promise<CloudCredentials | null> | null = null;
 /** A refresh token the registry already refused: not retried on every call. */
 let refusedRefreshToken: string | null = null;
+
+/**
+ * The stored credentials when no renewal is needed, synchronously — so a
+ * report with a valid token starts its request at once, as it always has.
+ */
+function freshCredentialsNow(): CloudCredentials | null {
+  const current = loadCredentials();
+  if (!current) return null;
+  if (current.expires_at && Date.now() > current.expires_at - RENEW_MARGIN_MS) return null;
+  return current;
+}
 
 /**
  * The signed-in user's credentials for a report, renewed with the refresh
@@ -842,10 +858,8 @@ let refusedRefreshToken: string | null = null;
  * several renewals racing with the same one can end the session.
  */
 export async function credentialsForReporting(): Promise<CloudCredentials | null> {
-  const current = loadCredentials();
-  if (current && !(current.expires_at && Date.now() > current.expires_at - RENEW_MARGIN_MS)) {
-    return current;
-  }
+  const current = freshCredentialsNow();
+  if (current) return current;
 
   let stored: CloudCredentials | null;
   try {
@@ -858,9 +872,7 @@ export async function credentialsForReporting(): Promise<CloudCredentials | null
   renewing ??= renewCredentials(stored).finally(() => { renewing = null; });
   const renewed = await renewing;
   if (!renewed) {
-    warnReportingSignInOnce(
-      "Your Rotifer sign-in has expired and could not be renewed, so MCP tool calls are not being counted. Run `rotifer login` to sign in again.",
-    );
+    warnReportingSignInOnce(SIGN_IN_EXPIRED);
   }
   return renewed;
 }
@@ -868,6 +880,11 @@ export async function credentialsForReporting(): Promise<CloudCredentials | null
 async function renewCredentials(stored: CloudCredentials): Promise<CloudCredentials | null> {
   if (!stored.refresh_token || stored.refresh_token === refusedRefreshToken) return null;
   const config = loadCloudConfig();
+  // A stalled auth endpoint must not hold a report — or a flush waiting on
+  // it — open for the OS's TCP timeout.
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), FLUSH_TIMEOUT_MS);
+  abortTimer.unref?.();
   try {
     const res = await fetch(
       `${config.endpoint.replace(/\/+$/, "")}/auth/v1/token?grant_type=refresh_token`,
@@ -875,6 +892,7 @@ async function renewCredentials(stored: CloudCredentials): Promise<CloudCredenti
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: config.anonKey },
         body: JSON.stringify({ refresh_token: stored.refresh_token }),
+        signal: controller.signal,
       },
     );
     if (!res.ok) {
@@ -893,6 +911,8 @@ async function renewCredentials(stored: CloudCredentials): Promise<CloudCredenti
     return renewed;
   } catch {
     return null;
+  } finally {
+    clearTimeout(abortTimer);
   }
 }
 
@@ -935,9 +955,7 @@ async function reportMcpCall(entry: {
     }),
   });
   if (res.status === 401 || res.status === 403) {
-    warnReportingSignInOnce(
-      "Rotifer Cloud did not accept your sign-in when recording an MCP tool call, so calls are not being counted. Run `rotifer login` to sign in again.",
-    );
+    warnReportingSignInOnce(SIGN_IN_REJECTED);
   }
 }
 
@@ -995,16 +1013,14 @@ export async function flushInvocationReports(timeoutMs: number = FLUSH_TIMEOUT_M
  * (ADR-322's own history), and this function had no debug output at all
  * where the CLI's equivalent always did.
  *
- * Its caller already only reaches this when signed in, so the opt-out is what
- * this check adds: someone who sets ROTIFER_TELEMETRY=0 means all of it, not
- * just the part they were shown.
+ * The caller is the signed-in account, taken from the same renewed sign-in
+ * as logMcpCall (T-74): an expired access token is renewed rather than
+ * leaving the run unreported, and a sign-in that cannot be renewed or is
+ * rejected is said once on stderr. ROTIFER_TELEMETRY=0 still means all of
+ * it, renewal included.
  */
-export function logGeneInvocation(
-  geneId: string,
-  callerAgentId: string,
-  channel?: string | null,
-): void {
-  if (!telemetryEnabled(callerAgentId)) return;
+export function logGeneInvocation(geneId: string, channel?: string | null): void {
+  if (telemetryOptedOut()) return;
 
   // v2 carries the channel; the original entry point stays for registries that
   // have not applied playground migration 20260830000000 yet. Both share one
@@ -1024,28 +1040,40 @@ export function logGeneInvocation(
   const abortTimer = setTimeout(() => controller.abort(), FLUSH_TIMEOUT_MS);
   abortTimer.unref?.();
 
-  const settled: Promise<void> = fetch(rpcUrl(rpc), {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify(
-      isUseV2
-        ? {
-            p_gene_id: geneId,
-            p_caller_agent_id: callerAgentId,
-            p_client_channel: channel,
-          }
-        : {
-            p_gene_id: geneId,
-            p_caller_agent_id: callerAgentId,
-          },
-    ),
-    signal: controller.signal,
-  })
-    .then((res) => {
-      if (!res.ok && process.env.ROTIFER_DEBUG) {
+  const send = (creds: CloudCredentials): Promise<void> => {
+    if (!telemetryEnabled(creds.user?.id ?? null)) return Promise.resolve();
+    return fetch(rpcUrl(rpc), {
+      method: "POST",
+      headers: { ...headers(), Authorization: `Bearer ${creds.access_token}` },
+      body: JSON.stringify(
+        isUseV2
+          ? {
+              p_gene_id: geneId,
+              p_caller_agent_id: creds.user.id,
+              p_client_channel: channel,
+            }
+          : {
+              p_gene_id: geneId,
+              p_caller_agent_id: creds.user.id,
+            },
+      ),
+      signal: controller.signal,
+    }).then((res) => {
+      if (res.status === 401 || res.status === 403) {
+        warnReportingSignInOnce(SIGN_IN_REJECTED);
+      } else if (!res.ok && process.env.ROTIFER_DEBUG) {
         process.stderr.write(`[rotifer-mcp] ${rpc} failed (${res.status})\n`);
       }
-    })
+    });
+  };
+
+  // A valid token sends at once; only an expired one waits for the renewal.
+  const fresh = freshCredentialsNow();
+  const report: Promise<void> = fresh
+    ? send(fresh)
+    : credentialsForReporting().then((creds) => (creds ? send(creds) : undefined));
+
+  const settled: Promise<void> = report
     .catch((err: unknown) => {
       if (process.env.ROTIFER_DEBUG) {
         process.stderr.write(`[rotifer-mcp] ${rpc} error: ${(err as Error)?.message ?? err}\n`);

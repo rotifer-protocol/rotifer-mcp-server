@@ -15,7 +15,6 @@ import { getGeneStatsRpc, getReputationLeaderboard, getDeveloperProfile, getGene
 import { toolCallSucceeded } from "./call-outcome.js";
 import { resolveMcpChannel } from "./channel.js";
 import { recordHeartbeat } from "./telemetry/heartbeat.js";
-import { loadCredentials } from "./auth.js";
 import { resolveLocalGeneCloudId, setSpawnedCliChannel } from "./local.js";
 import { resolveToolSet, unavailableToolMessage, resolveAllowList, blockedEscapeHatches, escapeHatchMessage, resourceAllowed, resourceTemplateAllowed, unavailableResourceMessage } from "./tool-sets.js";
 import { getPackageVersion, getVersionInfo, formatUpdateHint, type VersionInfo } from "./version.js";
@@ -685,7 +684,6 @@ export function createServer(): Server {
           throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}. Use ListTools to see available tools.`);
       }
 
-      const callerId = loadCredentials()?.user?.id ?? null;
       const geneId = extractGeneId(name, (args || {}) as Record<string, unknown>);
 
       // Reached only when the handler returned rather than threw — which is how
@@ -700,10 +698,10 @@ export function createServer(): Server {
         latency_ms: Date.now() - startMs,
       });
 
-      if (name === "run_gene" && callerId && geneId) {
+      if (name === "run_gene" && geneId) {
         // The client identified itself during `initialize`; that is what turns
         // "an MCP call" into "a call from DSH" in the ledger.
-        logGeneInvocation(geneId, callerId, channel);
+        logGeneInvocation(geneId, channel);
       }
 
       // Separate, narrower signal: any Gene running at all, no identity or
