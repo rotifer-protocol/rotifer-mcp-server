@@ -1,7 +1,7 @@
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { loadCredentials } from "./auth.js";
+import { loadCredentials, loadStoredCredentials, saveCredentials, type CloudCredentials } from "./auth.js";
 import { telemetryOptedOutByEnv } from "./telemetry/consent.js";
 import { validateGeneName } from "./validate-gene-name.js";
 import { snapshotGene, type SnapshotMeta } from "./snapshots.js";
@@ -811,34 +811,152 @@ export function telemetryOptedOut(): boolean {
   return telemetryOptedOutByEnv();
 }
 
+let hasWarnedReportingSignIn = false;
+
+/**
+ * Said once per process, on stderr, when reporting stops because of the
+ * sign-in. Not thrown: a tool call must not fail because its usage report
+ * could not be sent. But not swallowed either — the registry records MCP calls
+ * under the signed-in account only (T-74), so an expired session that nobody
+ * mentions is a call count that quietly stops growing.
+ */
+function warnReportingSignInOnce(message: string): void {
+  if (hasWarnedReportingSignIn) return;
+  hasWarnedReportingSignIn = true;
+  process.stderr.write(`[rotifer] ${message}\n`);
+}
+
+const SIGN_IN_EXPIRED =
+  "Your Rotifer sign-in has expired and could not be renewed, so your MCP tool calls and gene runs are not being counted. Run `rotifer login` to sign in again.";
+const SIGN_IN_REJECTED =
+  "Rotifer Cloud did not accept your sign-in when recording usage, so your MCP tool calls and gene runs are not being counted. Run `rotifer login` to sign in again.";
+
+/** Renew a little before expiry, so a report does not race the deadline. */
+const RENEW_MARGIN_MS = 60_000;
+
+let renewing: Promise<CloudCredentials | null> | null = null;
+/** A refresh token the registry already refused: not retried on every call. */
+let refusedRefreshToken: string | null = null;
+
+/**
+ * The stored credentials when no renewal is needed, synchronously — so a
+ * report with a valid token starts its request at once, as it always has.
+ */
+function freshCredentialsNow(): CloudCredentials | null {
+  const current = loadCredentials();
+  if (!current) return null;
+  if (current.expires_at && Date.now() > current.expires_at - RENEW_MARGIN_MS) return null;
+  return current;
+}
+
+/**
+ * The signed-in user's credentials for a report, renewed with the refresh
+ * token when the access token has expired. Null when nobody is signed in, or
+ * when renewal failed — in which case the user is told once.
+ *
+ * Concurrent reports share one renewal: a refresh token is single-use, and
+ * several renewals racing with the same one can end the session.
+ */
+export async function credentialsForReporting(): Promise<CloudCredentials | null> {
+  const current = freshCredentialsNow();
+  if (current) return current;
+
+  let stored: CloudCredentials | null;
+  try {
+    stored = loadStoredCredentials();
+  } catch {
+    stored = null;
+  }
+  if (!stored) return null;
+
+  renewing ??= renewCredentials(stored).finally(() => { renewing = null; });
+  const renewed = await renewing;
+  if (!renewed) {
+    warnReportingSignInOnce(SIGN_IN_EXPIRED);
+  }
+  return renewed;
+}
+
+async function renewCredentials(stored: CloudCredentials): Promise<CloudCredentials | null> {
+  if (!stored.refresh_token || stored.refresh_token === refusedRefreshToken) return null;
+  const config = loadCloudConfig();
+  // A stalled auth endpoint must not hold a report — or a flush waiting on
+  // it — open for the OS's TCP timeout.
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), FLUSH_TIMEOUT_MS);
+  abortTimer.unref?.();
+  try {
+    const res = await fetch(
+      `${config.endpoint.replace(/\/+$/, "")}/auth/v1/token?grant_type=refresh_token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: config.anonKey },
+        body: JSON.stringify({ refresh_token: stored.refresh_token }),
+        signal: controller.signal,
+      },
+    );
+    if (!res.ok) {
+      if (res.status === 400 || res.status === 401) refusedRefreshToken = stored.refresh_token;
+      return null;
+    }
+    const result = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
+    if (!result.access_token) return null;
+    const renewed: CloudCredentials = {
+      ...stored,
+      access_token: result.access_token,
+      refresh_token: result.refresh_token || stored.refresh_token,
+      expires_at: Date.now() + (result.expires_in || 3600) * 1000,
+    };
+    saveCredentials(renewed);
+    return renewed;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(abortTimer);
+  }
+}
+
+/**
+ * Report one MCP tool call. Fire-and-forget: it never throws and never delays
+ * the tool. Sent with the signed-in user's token, which is what the registry
+ * records as the caller (T-74) — a report without one is accepted but no
+ * longer counted, so there is no caller parameter to fill in.
+ */
 export function logMcpCall(entry: {
   tool_name: string;
   gene_id?: string | null;
   success: boolean;
   latency_ms: number;
-  caller?: string | null;
 }): void {
-  const body = {
-    tool_name: entry.tool_name,
-    gene_id: entry.gene_id || null,
-    success: entry.success,
-    latency_ms: entry.latency_ms,
-    caller: entry.caller || null,
-  };
+  if (telemetryOptedOut()) return;
+  void reportMcpCall(entry).catch(() => {});
+}
 
-  if (!telemetryEnabled(body.caller)) return;
+async function reportMcpCall(entry: {
+  tool_name: string;
+  gene_id?: string | null;
+  success: boolean;
+  latency_ms: number;
+}): Promise<void> {
+  const creds = await credentialsForReporting();
+  if (!creds || !telemetryEnabled(creds.user?.id ?? null)) return;
 
-  fetch(rpcUrl("log_mcp_call"), {
+  const res = await fetch(rpcUrl("log_mcp_call"), {
     method: "POST",
-    headers: headers(),
+    headers: { ...headers(), Authorization: `Bearer ${creds.access_token}` },
     body: JSON.stringify({
-      p_tool_name: body.tool_name,
-      p_gene_id: body.gene_id,
-      p_success: body.success,
-      p_latency_ms: body.latency_ms,
-      p_caller: body.caller,
+      p_tool_name: entry.tool_name,
+      p_gene_id: entry.gene_id || null,
+      p_success: entry.success,
+      p_latency_ms: entry.latency_ms,
+      // Ignored by a registry with T-74 (it takes the caller from the token);
+      // still read by one without it, so the two can be upgraded in any order.
+      p_caller: creds.user.id,
     }),
-  }).catch(() => {});
+  });
+  if (res.status === 401 || res.status === 403) {
+    warnReportingSignInOnce(SIGN_IN_REJECTED);
+  }
 }
 
 /**
@@ -895,16 +1013,14 @@ export async function flushInvocationReports(timeoutMs: number = FLUSH_TIMEOUT_M
  * (ADR-322's own history), and this function had no debug output at all
  * where the CLI's equivalent always did.
  *
- * Its caller already only reaches this when signed in, so the opt-out is what
- * this check adds: someone who sets ROTIFER_TELEMETRY=0 means all of it, not
- * just the part they were shown.
+ * The caller is the signed-in account, taken from the same renewed sign-in
+ * as logMcpCall (T-74): an expired access token is renewed rather than
+ * leaving the run unreported, and a sign-in that cannot be renewed or is
+ * rejected is said once on stderr. ROTIFER_TELEMETRY=0 still means all of
+ * it, renewal included.
  */
-export function logGeneInvocation(
-  geneId: string,
-  callerAgentId: string,
-  channel?: string | null,
-): void {
-  if (!telemetryEnabled(callerAgentId)) return;
+export function logGeneInvocation(geneId: string, channel?: string | null): void {
+  if (telemetryOptedOut()) return;
 
   // v2 carries the channel; the original entry point stays for registries that
   // have not applied playground migration 20260830000000 yet. Both share one
@@ -924,28 +1040,40 @@ export function logGeneInvocation(
   const abortTimer = setTimeout(() => controller.abort(), FLUSH_TIMEOUT_MS);
   abortTimer.unref?.();
 
-  const settled: Promise<void> = fetch(rpcUrl(rpc), {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify(
-      isUseV2
-        ? {
-            p_gene_id: geneId,
-            p_caller_agent_id: callerAgentId,
-            p_client_channel: channel,
-          }
-        : {
-            p_gene_id: geneId,
-            p_caller_agent_id: callerAgentId,
-          },
-    ),
-    signal: controller.signal,
-  })
-    .then((res) => {
-      if (!res.ok && process.env.ROTIFER_DEBUG) {
+  const send = (creds: CloudCredentials): Promise<void> => {
+    if (!telemetryEnabled(creds.user?.id ?? null)) return Promise.resolve();
+    return fetch(rpcUrl(rpc), {
+      method: "POST",
+      headers: { ...headers(), Authorization: `Bearer ${creds.access_token}` },
+      body: JSON.stringify(
+        isUseV2
+          ? {
+              p_gene_id: geneId,
+              p_caller_agent_id: creds.user.id,
+              p_client_channel: channel,
+            }
+          : {
+              p_gene_id: geneId,
+              p_caller_agent_id: creds.user.id,
+            },
+      ),
+      signal: controller.signal,
+    }).then((res) => {
+      if (res.status === 401 || res.status === 403) {
+        warnReportingSignInOnce(SIGN_IN_REJECTED);
+      } else if (!res.ok && process.env.ROTIFER_DEBUG) {
         process.stderr.write(`[rotifer-mcp] ${rpc} failed (${res.status})\n`);
       }
-    })
+    });
+  };
+
+  // A valid token sends at once; only an expired one waits for the renewal.
+  const fresh = freshCredentialsNow();
+  const report: Promise<void> = fresh
+    ? send(fresh)
+    : credentialsForReporting().then((creds) => (creds ? send(creds) : undefined));
+
+  const settled: Promise<void> = report
     .catch((err: unknown) => {
       if (process.env.ROTIFER_DEBUG) {
         process.stderr.write(`[rotifer-mcp] ${rpc} error: ${(err as Error)?.message ?? err}\n`);

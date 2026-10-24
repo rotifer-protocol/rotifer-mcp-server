@@ -7,6 +7,7 @@ export default defineConfig({
       "tests/integration/live-*.test.ts",
       "tests/integration/v075-migrations.test.ts",
     ],
+    setupFiles: ["tests/support/isolate-telemetry-env.ts"],
     testTimeout: 15000,
     hookTimeout: 20000,
     coverage: {

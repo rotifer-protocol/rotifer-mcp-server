@@ -36,13 +36,23 @@ function credentialsPath(): string {
 }
 
 export function loadCredentials(): CloudCredentials | null {
+  const data = loadStoredCredentials();
+  if (!data) return null;
+  if (data.expires_at && Date.now() > data.expires_at) return null;
+  return data;
+}
+
+/**
+ * The credentials file as stored, expired or not. Only for renewing an
+ * expired session (cloud.ts `credentialsForReporting`); everything else wants
+ * `loadCredentials`, which treats an expired session as signed out.
+ */
+export function loadStoredCredentials(): CloudCredentials | null {
   const path = credentialsPath();
   if (!existsSync(path)) return null;
 
   try {
-    const data = JSON.parse(readFileSync(path, "utf-8")) as CloudCredentials;
-    if (data.expires_at && Date.now() > data.expires_at) return null;
-    return data;
+    return JSON.parse(readFileSync(path, "utf-8")) as CloudCredentials;
   } catch {
     return null;
   }
