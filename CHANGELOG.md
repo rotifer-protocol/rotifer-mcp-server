@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.4](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.3...v0.19.4) (2026-10-24)
+
+
+### Bug Fixes
+
+* **cloud:** report MCP calls with the signed-in user's token ([#144](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/144)) ([1d0cca2](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/1d0cca2bd24d8acffe310b37a5f9a1e113b00ddb))
+* **deps:** clear the brace-expansion and source-map-js advisories ([#142](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/142)) ([2554016](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/255401659b548143831307bc1d0c0afdde40d09a))
+* **deps:** upgrade @modelcontextprotocol/sdk to 1.32.1 ([#145](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/145)) ([15c728c](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/15c728c7d07bb753a67d5abff63664f3180f794f))
+* **deps:** upgrade body-parser, zod and fast-uri in the lockfile ([#147](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/147)) ([554a277](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/554a277c4a190486f3e02fffc899c74110bb9e2b))
+* **serve:** cap request bodies at 256 KiB and listen on loopback by default ([#146](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/146)) ([ffd75cd](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/ffd75cd7fdea434f0cf92b466b89f24035652a97))
+
 ## [0.19.3](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.2...v0.19.3) (2026-10-19)
 
 
