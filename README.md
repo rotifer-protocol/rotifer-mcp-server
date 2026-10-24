@@ -340,6 +340,29 @@ This is a command you run, not a tool the model can call. Updating means a
 global install, and a tool could not even report the result honestly — the model
 would say "updated" while still being served by the old process.
 
+### Serving over HTTP
+
+The server normally talks over stdio to the MCP host that launched it. To expose
+it over Streamable HTTP instead:
+
+```bash
+rotifer-mcp-server serve                      # http://127.0.0.1:3000/mcp
+rotifer-mcp-server serve --port 8080
+rotifer-mcp-server serve --host 0.0.0.0       # reachable from other machines
+```
+
+- **It listens on `127.0.0.1` unless you pass `--host`.** The HTTP endpoint has no
+  authentication, and its tools act with your signed-in Rotifer account, so it is
+  not reachable from other machines by default. If you pass a non-loopback
+  `--host`, the server says so on stderr when it starts. Earlier versions
+  listened on every interface.
+- **Request bodies are capped at 256 KiB.** A larger request is answered `413`
+  with a JSON-RPC error before it is parsed. MCP messages are far smaller than
+  this; the cap exists because the SDK's default (4 MiB) is the bound
+  [GHSA-46jr-4wx8-v453](https://github.com/advisories/GHSA-46jr-4wx8-v453)
+  describes, where a single request can exhaust the server's memory.
+- `GET /health` answers `{"status":"ok","transport":"streamable-http"}` for liveness checks.
+
 ### Usage reporting
 
 When you are **signed in**, each tool call reports a usage record to Rotifer

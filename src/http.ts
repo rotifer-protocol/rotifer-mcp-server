@@ -4,8 +4,28 @@ import { createServer } from "./server.js";
 
 const DEFAULT_PORT = 3000;
 
-export async function startHttpServer(opts?: { port?: number }) {
+/**
+ * Loopback unless the operator asks otherwise (`serve --host`). This server
+ * has no authentication of its own, and its tools act with the signed-in
+ * user's Rotifer account, so it should not be reachable from other machines
+ * by default. Before GHSA-46jr was fixed here it listened on every interface.
+ */
+export const DEFAULT_HOST = "127.0.0.1";
+
+/**
+ * MCP requests are small JSON-RPC messages; nothing this server accepts comes
+ * near this. The SDK's own default is 4 MiB, and GHSA-46jr-4wx8-v453 is that a
+ * single request within that default can exhaust server memory during
+ * validation — the advisory is explicit that upgrading the SDK alone changes
+ * nothing. A larger body is answered 413 before it is parsed.
+ */
+export const MAX_REQUEST_BODY_BYTES = 256 * 1024;
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+
+export async function startHttpServer(opts?: { port?: number; host?: string }): Promise<http.Server> {
   const port = opts?.port ?? parseInt(process.env.PORT || String(DEFAULT_PORT), 10);
+  const host = opts?.host ?? DEFAULT_HOST;
 
   const httpServer = http.createServer(async (req, res) => {
     const origin = req.headers.origin || "";
@@ -31,7 +51,10 @@ export async function startHttpServer(opts?: { port?: number }) {
 
     if (url === "/mcp" || url === "/") {
       try {
-        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: undefined,
+          maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+        });
         const server = createServer();
         res.on("close", () => {
           transport.close();
@@ -52,8 +75,15 @@ export async function startHttpServer(opts?: { port?: number }) {
     }
   });
 
-  httpServer.listen(port, () => {
-    console.error(`Rotifer MCP Server (Streamable HTTP) listening on http://localhost:${port}/mcp`);
+  httpServer.listen(port, host, () => {
+    const shown = host.includes(":") ? `[${host}]` : host;
+    console.error(`Rotifer MCP Server (Streamable HTTP) listening on http://${shown}:${port}/mcp`);
+    if (!LOOPBACK_HOSTS.has(host)) {
+      console.error(
+        `Warning: listening on ${host}, so other machines can reach this server. ` +
+          "It has no authentication, and its tools act with your signed-in Rotifer account.",
+      );
+    }
   });
 
   const shutdown = () => {
@@ -63,4 +93,5 @@ export async function startHttpServer(opts?: { port?: number }) {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+  return httpServer;
 }
