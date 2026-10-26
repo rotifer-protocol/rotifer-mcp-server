@@ -203,7 +203,7 @@ Try asking your AI: *"Use the rotifer-hello prompt to build me an agent"* or *"U
 ┌─────────────────────────────────────────────────┐
 │  @rotifer/mcp-server                            │
 │                                                 │
-│  30 Tools  7 Resources  4 Prompts  Local Scanner│
+│  31 Tools  7 Resources  4 Prompts  Local Scanner│
 │  ┌──────────┐  ┌───────────┐   ┌────────────┐  │
 │  │ discover │  │rotifer:// │   │ ./genes/    │  │
 │  │ lifecycle│  │genes/stats│   │ phenotype   │  │
@@ -251,6 +251,10 @@ npx @rotifer/mcp-server --tools=readonly        # nothing that writes (14 tools)
 ROTIFER_MCP_TOOLS=search_genes,get_gene_detail  # an exact list
 ROTIFER_MCP_TOOLS=evolve,vg_scan                # a preset plus one
 ```
+
+A name that is neither a preset nor a tool here is ignored, with a note on
+stderr. If none of the names are, the server does not start: it lists the
+presets and exits with code 2, rather than running with no tools at all.
 
 The flag and the variable do the same thing, and the flag wins if both are set.
 Both exist because callers differ in what they can reach: a shell user sets the

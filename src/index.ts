@@ -2,6 +2,7 @@
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./server.js";
+import { ToolSetError } from "./tool-sets.js";
 import { getVersionInfo, getPackageVersion } from "./version.js";
 import { flushInvocationReports } from "./cloud.js";
 
@@ -57,6 +58,9 @@ async function main() {
       process.exit(2);
     }
     notifyVersionOnStderr();
+    // Sessions build their server per request; build one now so an unusable
+    // --tools stops `serve` at launch, not on the first request.
+    createServer();
     await startHttpServer({ port, host });
     return;
   }
@@ -93,6 +97,11 @@ async function main() {
 }
 
 main().catch((err) => {
+  // A launch-line mistake, not a crash: say what to fix, exit as a usage error.
+  if (err instanceof ToolSetError) {
+    console.error(err.message);
+    process.exit(2);
+  }
   console.error("Fatal:", err);
   process.exit(1);
 });
