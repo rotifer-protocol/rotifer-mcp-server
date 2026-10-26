@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.5](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.4...v0.19.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* **telemetry:** honour `rotifer telemetry off` for MCP usage reports ([#148](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/148)) ([09c663e](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/09c663ed9e792e9e35bfa074e0b75b8a33d95f12))
+
 ## [0.19.4](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.3...v0.19.4) (2026-10-24)
 
 
