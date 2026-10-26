@@ -2,7 +2,8 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { loadCredentials, loadStoredCredentials, saveCredentials, type CloudCredentials } from "./auth.js";
-import { telemetryOptedOutByEnv } from "./telemetry/consent.js";
+import { telemetryOptedOutByEnv, telemetryExplicitlyOnByEnv } from "./telemetry/consent.js";
+import { readStoredTelemetryChoice } from "./telemetry/config.js";
 import { validateGeneName } from "./validate-gene-name.js";
 import { snapshotGene, type SnapshotMeta } from "./snapshots.js";
 import type {
@@ -803,12 +804,22 @@ export function telemetryEnabled(caller: string | null): boolean {
  * as no opt-out at all, only harder to notice.
  */
 /**
- * Delegates to the shared check (telemetry/consent.js) so this and the
- * anonymous heartbeat (ADR-329) can never drift apart on what "off" means.
- * ADR-329's decision is explicit that ROTIFER_TELEMETRY=0 turns off both.
+ * Same resolution order as the anonymous heartbeat (ADR-329, and
+ * resolveHeartbeatDecision in telemetry/config.js): DO_NOT_TRACK /
+ * ROTIFER_TELEMETRY in this shell, either direction, then the stored choice
+ * in ~/.rotifer/telemetry.json — the file the CLI's `rotifer telemetry off`
+ * writes. ADR-329 is explicit that "off" means everything.
+ *
+ * Up to 0.19.4 this read only the environment, so a user who switched
+ * telemetry off in the CLI kept being reported through every tool call
+ * (T-87). Mirrors playground's src/cloud/invocation.ts telemetryOptedOut();
+ * if they ever diverge, fix both. The stored choice is read, never written,
+ * here; an unreadable file counts as no choice.
  */
 export function telemetryOptedOut(): boolean {
-  return telemetryOptedOutByEnv();
+  if (telemetryOptedOutByEnv()) return true;
+  if (telemetryExplicitlyOnByEnv()) return false;
+  return readStoredTelemetryChoice() === false;
 }
 
 let hasWarnedReportingSignIn = false;
