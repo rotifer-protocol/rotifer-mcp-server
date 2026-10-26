@@ -81,6 +81,27 @@ function readStoredConfig(): HeartbeatConfig | null {
   }
 }
 
+/**
+ * The stored on/off choice alone, for this server's usage reports: false
+ * when telemetry.json says `"enabled": false` (written by the CLI's
+ * `rotifer telemetry off`), true when it says anything else, null when there
+ * is no readable file. Unlike loadOrInitHeartbeatConfig() it never writes,
+ * and it does not require a machine_id. Never throws: an unreadable file is
+ * "no choice", because telemetry must never break or block a tool call.
+ * Same function, same name, as playground's src/telemetry/config.ts.
+ */
+export function readStoredTelemetryChoice(): boolean | null {
+  try {
+    const p = telemetryConfigPath();
+    if (!existsSync(p)) return null;
+    const parsed: unknown = JSON.parse(readFileSync(p, "utf-8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return (parsed as { enabled?: unknown }).enabled !== false;
+  } catch {
+    return null;
+  }
+}
+
 function writeStoredConfig(config: HeartbeatConfig): void {
   ensurePrivateDir(ROTIFER_HOME);
   const p = telemetryConfigPath();
