@@ -1,8 +1,8 @@
 /**
  * Tool sets — let a caller declare which tools it actually needs.
  *
- * This server exposes thirty tools. A Skill that ranks and swaps Genes uses ten
- * of them, but installing that Skill puts `publish_gene`, `login`,
+ * This server exposes every tool by default. A Skill that ranks and swaps Genes
+ * uses ten of them, but installing that Skill puts `publish_gene`, `login`,
  * `arena_submit` and the rest within reach of whatever assistant loaded it.
  * That gap between "what this needs" and "what this can do" is the finding, and
  * the fix is to let the caller say which it wants.
@@ -274,9 +274,10 @@ export function toolSetFromArgv(argv: readonly string[] = process.argv.slice(2))
  * The command line wins over the environment: it is the more specific of the
  * two, and it is what a manifest can actually set.
  *
- * Unknown names are ignored rather than fatal: a typo should cost you one tool,
- * not the whole server, and a set written for a newer version should still work
- * against an older one.
+ * Unknown names are kept here and sorted out by checkToolSet() once the server
+ * knows its tool list: a typo next to real names costs that one name, and a set
+ * written for a newer version still works against an older one. A declaration
+ * that names nothing real stops the server instead (checkToolSet).
  */
 export function resolveToolSet(
   declaration = toolSetFromArgv() ?? process.env.ROTIFER_MCP_TOOLS
@@ -290,9 +291,55 @@ export function resolveToolSet(
     if (preset) preset.forEach((t) => allowed.add(t));
     else allowed.add(token);
   }
-  // An empty or entirely-unrecognised declaration would silently produce a
-  // server with no tools, which looks like a broken install. Fall back to all.
+  // Only separators (",,") declares nothing, which means every tool.
   return allowed.size ? allowed : null;
+}
+
+/** A tool set that names nothing this server has; the server must not start on it. */
+export class ToolSetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ToolSetError";
+  }
+}
+
+/**
+ * Check a declared set against the tools this server actually has.
+ *
+ * Returns the declared names it does not recognise, so the caller can say it is
+ * ignoring them. Throws ToolSetError when it recognises none: `--tools=core`
+ * (no such preset) used to resolve to {"core"} and start a server whose
+ * tools/list was empty, with nothing on stderr — a mistyped preset looked
+ * exactly like a broken install.
+ */
+export function checkToolSet(allowed: Set<string> | null, knownTools: readonly string[]): string[] {
+  if (!allowed) return [];
+  const known = new Set(knownTools);
+  const unknown = [...allowed].filter((name) => !known.has(name));
+  if (unknown.length === allowed.size) {
+    throw new ToolSetError(unusableToolSetMessage(unknown, knownTools.length));
+  }
+  return unknown;
+}
+
+const presetSummary = () =>
+  Object.entries(PRESETS)
+    .map(([name, tools]) => `${name} (${tools.length} tools)`)
+    .join(", ");
+
+/** Why the server will not start on this declaration, and what would work. */
+export function unusableToolSetMessage(unknown: readonly string[], toolCount: number): string {
+  return [
+    `--tools / ROTIFER_MCP_TOOLS names no tool this server has: ${unknown.join(", ")}`,
+    `  • a preset:        ${presetSummary()}`,
+    "  • or tool names:   --tools=search_genes,get_gene_detail",
+    `  • or all ${toolCount} tools: drop --tools / unset ROTIFER_MCP_TOOLS`,
+  ].join("\n");
+}
+
+/** The stderr line for names that were declared but are not tools here. */
+export function ignoredToolNamesMessage(unknown: readonly string[]): string {
+  return `--tools / ROTIFER_MCP_TOOLS: ignoring unknown name(s) ${unknown.join(", ")} (presets: ${Object.keys(PRESETS).join(", ")})`;
 }
 
 /**
