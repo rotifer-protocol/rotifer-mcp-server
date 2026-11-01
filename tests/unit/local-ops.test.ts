@@ -259,6 +259,17 @@ describe("shell-backed local commands", () => {
     }
   });
 
+  it("pins the npx fallback to a CLI with Agent Memory (protocol v0.9.4, @rotifer/playground >= 0.33.0)", () => {
+    // agent_run reaches `rotifer agent run` through this fallback when no CLI
+    // is installed. Below 0.33.0 the agent's genes get no memory at all, and
+    // users of the MCP server silently lag the protocol (2026-11-01: still on
+    // 0.27.0 six releases after it shipped; issue #151 had sat open since 10-26).
+    const [major, minor, patch] = PLAYGROUND_FALLBACK_SPEC.split("@").pop()!.split(".").map(Number);
+    expect([major, minor, patch]).not.toContain(NaN);
+    const atLeast = major > 0 || minor > 33 || (minor === 33 && patch >= 0);
+    expect(atLeast, `${PLAYGROUND_FALLBACK_SPEC} predates Agent Memory (0.33.0)`).toBe(true);
+  });
+
   it("uses the installed rotifer binary when available", () => {
     mockSpawnSequence(
       { status: 0, stdout: "/usr/local/bin/rotifer\n", stderr: "" },
