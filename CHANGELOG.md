@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.7](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.6...v0.19.7) (2026-11-01)
+
+
+### Bug Fixes
+
+* **local:** run Agent Memory-capable CLI 0.33.0 when no rotifer is installed ([#153](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/153)) ([211360f](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/211360f3e4cc887b30fe63184cad155b49b9f132)), closes [#151](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/151)
+
 ## [0.19.6](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.5...v0.19.6) (2026-10-26)
 
 
