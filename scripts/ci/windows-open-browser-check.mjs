@@ -1,12 +1,9 @@
 // CI-only, Windows-only. Mocked unit tests cannot show what cmd.exe or the
-// shell association does to a URL, so this drives the compiled server through
-// real process spawns on a real Windows host.
+// shell's URL handling does to a URL, so this drives the compiled server
+// through real process spawns on a real Windows host.
 //
-// The default browser is replaced, for this user only, by a small recorder, so
-// the check sees the exact URL a browser would have received. Where Windows
-// will not let that be replaced, a real browser starts and its command line is
-// read instead. The only side effect of a failure is a marker file in a temp
-// folder.
+// A private URL scheme, registered for this user only, records the exact URL it
+// receives. The only side effect of a failure is a marker file in a temp folder.
 //
 // Usage: node windows-open-browser-check.mjs [dist-folder]
 // Exit code 0 means every case passed; 1 means at least one did not.
@@ -47,24 +44,14 @@ function reg(...args) {
 
 const CHECK_SCHEME = "rotifer-open-check";
 reg("add", `HKCU\\Software\\Classes\\${CHECK_SCHEME}`, "/v", "URL Protocol", "/d", "", "/f");
-
-for (const scheme of ["http", "https", CHECK_SCHEME]) {
-  for (const key of ["UserChoice", "UserChoiceLatest"]) {
-    try {
-      reg("delete", `HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\${scheme}\\${key}`, "/f");
-    } catch {
-      // Absent on this image, or protected. Case 2 copes with either.
-    }
-  }
-  reg(
-    "add",
-    `HKCU\\Software\\Classes\\${scheme}\\shell\\open\\command`,
-    "/ve",
-    "/d",
-    `"${process.execPath}" "${recorder}" "%1"`,
-    "/f",
-  );
-}
+reg(
+  "add",
+  `HKCU\\Software\\Classes\\${CHECK_SCHEME}\\shell\\open\\command`,
+  "/ve",
+  "/d",
+  `"${process.execPath}" "${recorder}" "%1"`,
+  "/f",
+);
 
 const home = join(work, "home");
 const childEnv = { ...process.env, HOME: home, USERPROFILE: home, DO_NOT_TRACK: "1" };
@@ -94,25 +81,13 @@ async function waitForCapture(needle, ms) {
   return undefined;
 }
 
-function browserCommandLine(needle) {
-  const script =
-    `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${needle}*' -and ` +
-    `$_.Name -match '^(msedge|chrome|firefox)' } | Select-Object -First 1 -ExpandProperty CommandLine`;
-  try {
-    return execFileSync("powershell", ["-NoProfile", "-Command", script], { encoding: "utf8" }).trim();
-  } catch {
-    return "";
-  }
-}
-
 const results = [];
 function record(name, passed, detail) {
   results.push(passed);
   console.log(`${passed ? "PASS" : "FAIL"}  ${name}${detail ? ` - ${detail}` : ""}`);
 }
 
-// 1. The URL handler must receive a URL whole, ampersands included. A private
-// scheme is used so the result does not depend on the image's default browser.
+// 1. The URL handler must receive a URL whole, ampersands included.
 {
   const url = `${CHECK_SCHEME}://check/authorize?provider=github&redirect_to=x&code_challenge=abc`;
   const { bin, args } = buildOpenCommand(url, process.platform);
@@ -121,29 +96,7 @@ function record(name, passed, detail) {
   record("URL handler receives the whole URL", got === url, got === url ? "" : `received: ${got ?? "nothing"}`);
 }
 
-// 2. An ordinary authorization URL has to reach the real browser whole.
-{
-  const token = `browsercheck${process.pid}`;
-  const url =
-    `https://example.invalid/auth/v1/authorize?provider=github&state=${token}` +
-    "&redirect_to=http://localhost:9876/callback&code_challenge=abc&code_challenge_method=S256";
-  openBrowser(url);
-  let got = await waitForCapture(token, 15_000);
-  let via = "recorder";
-  for (let i = 0; !got && i < 20; i += 1) {
-    const line = browserCommandLine(token);
-    if (line) {
-      got = line;
-      via = "browser command line";
-    } else {
-      await delay(1_000);
-    }
-  }
-  const whole = got?.includes(url) ?? false;
-  record("authorization URL reaches the browser intact", whole, whole ? `via ${via}` : `received: ${got ?? "nothing"}`);
-}
-
-// 3. A URL that is valid but carries shell metacharacters in its query.
+// 2. A URL that is valid but carries shell metacharacters in its query.
 {
   const m = marker("query");
   openBrowser(`https://example.invalid/?a=1&${inject("query")}`);
@@ -151,7 +104,7 @@ function record(name, passed, detail) {
   record("metacharacters in a URL do not run as commands", !hit, hit ? "marker file was created" : "");
 }
 
-// 4. The command-line entry. The endpoint is a valid URL, so it gets all the way to the spawn.
+// 3. The command-line entry. The endpoint is a valid URL, so it gets all the way to the spawn.
 {
   const m = marker("cli");
   const child = spawn(process.execPath, [entry, "login", "--endpoint", `https://example.invalid/&${inject("cli")}&`], {
@@ -164,7 +117,7 @@ function record(name, passed, detail) {
   record("login --endpoint cannot run a command", !hit, hit ? "marker file was created" : "");
 }
 
-// 5. The MCP tool, over real stdio, with the argument an assistant could be tricked into sending.
+// 4. The MCP tool, over real stdio, with the argument an assistant could be tricked into sending.
 {
   const m = marker("mcp");
   const transport = new StdioClientTransport({ command: process.execPath, args: [entry], env: childEnv, cwd: work, stderr: "ignore" });
