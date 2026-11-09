@@ -4,11 +4,13 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - "src/auth.ts"
       - "src/open-browser.ts"
       - "src/validate-url.ts"
       - "src/login.ts"
       - "src/tools.ts"
       - "scripts/ci/windows-open-browser-check.mjs"
+      - "scripts/ci/windows-login-flow-check.mjs"
       - ".github/workflows/windows-open-browser.yml"
   workflow_dispatch:
 
@@ -28,3 +30,25 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node scripts/ci/windows-open-browser-check.mjs
+
+  login-flow:
+    name: Full login flow on Windows
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/ci/windows-login-flow-check.mjs
+      - name: Baseline on the code before the Windows fix (temporary)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          git fetch --depth=1 origin de5578a6c46cdcc1e5d2fc0191db748bb03326de
+          git worktree add ../baseline FETCH_HEAD
+          cd ../baseline && npm ci && npm run build
+          node "$GITHUB_WORKSPACE/scripts/ci/windows-login-flow-check.mjs" "$PWD/dist"
