@@ -142,7 +142,7 @@ AI:  → wrap_gene({ gene_name: "my-search", domain: "search.web", fidelity: "Wr
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `auth_status` | Check login status | — |
-| `login` | OAuth login (GitHub/GitLab) | `provider`, `endpoint` |
+| `login` | OAuth login (GitHub/GitLab) | `provider` |
 | `logout` | Clear credentials | — |
 | `get_mcp_stats` | MCP call analytics | `days` |
 | `get_my_reputation` | Current user's reputation | — |
@@ -238,6 +238,8 @@ Or set environment variables:
 ROTIFER_CLOUD_ENDPOINT=https://your-instance.supabase.co
 ROTIFER_CLOUD_ANON_KEY=your-anon-key
 ```
+
+The `login` MCP tool always signs in to the configured endpoint and refuses an `endpoint` argument: an assistant can be steered by what it reads, and sign-in sends credentials to that address. To sign in to another instance yourself, run `rotifer-mcp-server login --endpoint <url>`, which accepts only `http://` or `https://` addresses.
 
 ### Choosing which tools to expose
 

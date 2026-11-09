@@ -476,7 +476,6 @@ export function createServer(): Server {
           additionalProperties: false,
           properties: {
             provider: { type: "string", enum: ["github", "gitlab"], description: "OAuth provider (default: github)" },
-            endpoint: { type: "string", description: "Cloud endpoint URL (uses default if omitted)" },
           },
         },
       },

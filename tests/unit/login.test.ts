@@ -278,6 +278,35 @@ describe("runLogin", () => {
     expect(errorSpy).toHaveBeenCalledWith("Timed out");
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
+
+  it.each([
+    ["another protocol", "file:///etc/passwd"],
+    ["embedded credentials", "https://user:pass@example.com"],
+    ["a control character", "https://example.com\n"],
+    ["a query string", "https://example.com/?a=1"],
+    ["shell metacharacters that break the URL", "https://exa&mple.com|x"],
+  ])("refuses --endpoint with %s before starting anything", async (_label, endpoint) => {
+    vi.mocked(loadCredentials).mockReturnValue(null);
+    await runLogin({ endpoint });
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Cloud endpoint"));
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(startOAuthCallbackServer).not.toHaveBeenCalled();
+    expect(openBrowser).not.toHaveBeenCalled();
+  });
+
+  it("refuses a bad --endpoint even when already logged in", async () => {
+    vi.mocked(loadCredentials).mockReturnValue(MOCK_CREDS);
+    await runLogin({ endpoint: "file:///etc/passwd" });
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Cloud endpoint"));
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it("uses a valid --endpoint in its normalized form", async () => {
+    vi.mocked(loadCredentials).mockReturnValue(null);
+    mockCallbackServer(new Error("Timed out"));
+    await runLogin({ endpoint: "https://Self-Hosted.example/" });
+    expect(vi.mocked(openBrowser).mock.calls[0][0].startsWith("https://self-hosted.example/auth/v1/authorize?")).toBe(true);
+  });
 });
 
 describe("runLogout", () => {
