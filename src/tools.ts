@@ -37,7 +37,9 @@ import {
   startOAuthCallbackServer,
 } from "./auth.js";
 import { openBrowser } from "./open-browser.js";
+import { isSupportedProvider, SUPPORTED_PROVIDERS } from "./login.js";
 import { validateGeneName } from "./validate-gene-name.js";
+import { normalizeCloudEndpoint } from "./validate-url.js";
 
 const SORT_ALIAS: Record<string, string> = {
   popular: "downloads",
@@ -174,8 +176,24 @@ export interface LoginResult {
 
 export async function login(args: {
   provider?: string;
-  endpoint?: string;
-}): Promise<LoginResult> {
+} = {}): Promise<LoginResult> {
+  // This argument comes from the assistant, so content the assistant reads can
+  // steer it, and the token exchange sends the authorization code and PKCE
+  // verifier to whatever it names. The CLI flag and the settings below stay
+  // because a person sets those.
+  if ("endpoint" in args) {
+    throw new Error(
+      "login does not accept an endpoint over MCP. To use another Cloud instance, set \"endpoint\" in ~/.rotifer/cloud.json, " +
+        "set ROTIFER_CLOUD_ENDPOINT, or run: rotifer-mcp-server login --endpoint <url>",
+    );
+  }
+
+  // The tool schema lists these, but nothing enforces a schema at dispatch.
+  const provider = args.provider ?? "github";
+  if (!isSupportedProvider(provider)) {
+    throw new Error(`provider must be one of: ${SUPPORTED_PROVIDERS.join(", ")}.`);
+  }
+
   const existing = loadCredentials();
   if (existing) {
     return {
@@ -186,16 +204,15 @@ export async function login(args: {
     };
   }
 
-  const provider = (args.provider || "github") as "github" | "gitlab";
   const config = loadCloudConfig();
-  if (args.endpoint) config.endpoint = args.endpoint;
+  const endpoint = normalizeCloudEndpoint(config.endpoint);
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = generateCodeChallenge(codeVerifier);
 
   const { port: callbackPort, waitForCallback } = await startOAuthCallbackServer();
 
   const authUrl =
-    `${config.endpoint}/auth/v1/authorize?provider=${provider}` +
+    `${endpoint}/auth/v1/authorize?provider=${provider}` +
     `&redirect_to=http://localhost:${callbackPort}/callback` +
     `&code_challenge=${codeChallenge}` +
     `&code_challenge_method=S256`;
@@ -214,7 +231,7 @@ export async function login(args: {
       refreshToken = parts[parts.length - 1];
     } else {
       const tokenRes = await fetch(
-        `${config.endpoint}/auth/v1/token?grant_type=pkce`,
+        `${endpoint}/auth/v1/token?grant_type=pkce`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", apikey: config.anonKey },
@@ -232,7 +249,7 @@ export async function login(args: {
       refreshToken = tokenData.refresh_token;
     }
 
-    const userRes = await fetch(`${config.endpoint}/auth/v1/user`, {
+    const userRes = await fetch(`${endpoint}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${accessToken}`, apikey: config.anonKey },
     });
     const userData = (await userRes.json()) as any;

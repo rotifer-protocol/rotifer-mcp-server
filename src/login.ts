@@ -1,5 +1,6 @@
 import { loadCloudConfig } from "./cloud.js";
 import { openBrowser } from "./open-browser.js";
+import { normalizeCloudEndpoint } from "./validate-url.js";
 import {
   loadCredentials,
   saveCredentials,
@@ -10,13 +11,27 @@ import {
 } from "./auth.js";
 import type { AuthProvider } from "./auth.js";
 
-const SUPPORTED_PROVIDERS: AuthProvider[] = ["github", "gitlab"];
+export const SUPPORTED_PROVIDERS: AuthProvider[] = ["github", "gitlab"];
+
+export function isSupportedProvider(provider: string): provider is AuthProvider {
+  return (SUPPORTED_PROVIDERS as string[]).includes(provider);
+}
 
 export async function runLogin(options: {
   provider?: string;
   endpoint?: string;
 }): Promise<void> {
   console.log("Rotifer Cloud Login\n");
+
+  const config = loadCloudConfig();
+  let endpoint: string;
+  try {
+    endpoint = normalizeCloudEndpoint(options.endpoint || config.endpoint);
+  } catch (err: any) {
+    console.error(err.message);
+    process.exit(1);
+    return;
+  }
 
   const existing = loadCredentials();
   if (existing) {
@@ -25,15 +40,12 @@ export async function runLogin(options: {
     return;
   }
 
-  const provider = (options.provider || "github") as AuthProvider;
-  if (!SUPPORTED_PROVIDERS.includes(provider)) {
+  const provider = options.provider || "github";
+  if (!isSupportedProvider(provider)) {
     console.error(`Unsupported provider: '${provider}'. Supported: ${SUPPORTED_PROVIDERS.join(", ")}`);
     process.exit(1);
     return;
   }
-
-  const config = loadCloudConfig();
-  const endpoint = options.endpoint || config.endpoint;
 
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = generateCodeChallenge(codeVerifier);

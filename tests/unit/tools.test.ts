@@ -52,9 +52,11 @@ import {
   getReputationLeaderboard,
   getDeveloperProfile,
   installGene,
+  loadCloudConfig,
 } from "../../src/cloud.js";
 
-import { loadCredentials, clearCredentials } from "../../src/auth.js";
+import { loadCredentials, clearCredentials, startOAuthCallbackServer } from "../../src/auth.js";
+import { openBrowser } from "../../src/open-browser.js";
 
 import { arenaSubmit } from "../../src/local.js";
 
@@ -316,6 +318,45 @@ describe("login", () => {
     expect(result.success).toBe(true);
     expect(result.username).toBe("existing-user");
     expect(result.message).toContain("Already logged in");
+  });
+
+  it("refuses an endpoint argument without starting anything", async () => {
+    await expect(login({ endpoint: "https://cloud.example" } as any)).rejects.toThrow(/cloud\.json/);
+    expect(vi.mocked(startOAuthCallbackServer)).not.toHaveBeenCalled();
+    expect(vi.mocked(openBrowser)).not.toHaveBeenCalled();
+  });
+
+  it("leaves the shared Cloud config untouched when given an endpoint", async () => {
+    await login({ endpoint: "https://cloud.example" } as any).catch(() => {});
+    expect(loadCloudConfig().endpoint).toBe("https://test.rotifer.dev");
+  });
+
+  it.each(["bitbucket", "github&x=1", ""])("refuses provider %j at run time", async (provider) => {
+    await expect(login({ provider })).rejects.toThrow(/github, gitlab/);
+    expect(vi.mocked(startOAuthCallbackServer)).not.toHaveBeenCalled();
+    expect(vi.mocked(openBrowser)).not.toHaveBeenCalled();
+  });
+
+  it("authorizes against the configured endpoint", async () => {
+    vi.mocked(loadCredentials).mockReturnValueOnce(null);
+    vi.mocked(startOAuthCallbackServer).mockResolvedValueOnce({
+      port: 9876,
+      waitForCallback: Promise.reject(new Error("timed out")),
+    });
+    const result = await login({ provider: "gitlab" });
+    expect(result.success).toBe(false);
+    const url = vi.mocked(openBrowser).mock.calls[0][0];
+    expect(url.startsWith("https://test.rotifer.dev/auth/v1/authorize?provider=gitlab&")).toBe(true);
+    expect(url).toContain("redirect_to=http://localhost:9876/callback");
+    expect(url).toContain("code_challenge=test-challenge");
+  });
+
+  it("reports a bad configured endpoint before starting anything", async () => {
+    vi.mocked(loadCredentials).mockReturnValueOnce(null);
+    vi.mocked(loadCloudConfig).mockReturnValueOnce({ endpoint: "file:///etc/passwd", anonKey: "k" } as any);
+    await expect(login({})).rejects.toThrow(/http:\/\/ or https:\/\//);
+    expect(vi.mocked(startOAuthCallbackServer)).not.toHaveBeenCalled();
+    expect(vi.mocked(openBrowser)).not.toHaveBeenCalled();
   });
 });
 
