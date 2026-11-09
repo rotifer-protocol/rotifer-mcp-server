@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "
 import { join } from "node:path";
 import { createServer } from "node:http";
 import { randomBytes, createHash } from "node:crypto";
+import { renderCallbackPage } from "./callback-page.js";
 
 const ROTIFER_HOME = join(
   process.env.HOME || process.env.USERPROFILE || "/tmp",
@@ -120,19 +121,12 @@ export async function startOAuthCallbackServer(
       // code_verifier. A token handed to this port is never accepted, because any
       // page open in the user's browser can make that request.
       const code = url.searchParams.get("code");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(renderCallbackPage(url.searchParams));
       if (code) {
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end(
-          "<html><body><h2>Login successful!</h2>" +
-            "<p>You can close this window and return to the terminal.</p>" +
-            "</body></html>"
-        );
         server.close();
         clearTimeout(timeLimit);
         callbackResolve(code);
-      } else {
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end("<html><body><h2>Login failed</h2><p>Missing authorization code.</p></body></html>");
       }
     });
 
