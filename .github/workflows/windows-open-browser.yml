@@ -19,6 +19,30 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm run build
+      - name: Diagnose the default https association
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          function Snap { Get-CimInstance Win32_Process | Select-Object ProcessId, Name, CommandLine }
+          function Show-New($label, $before) {
+            Start-Sleep 15
+            $new = @(Snap | Where-Object { $before -notcontains $_.ProcessId -and $_.Name -notmatch '^(conhost|WmiPrvSE|pwsh|powershell)' })
+            Write-Output "=== ${label}: $($new.Count) new processes"
+            $new | ForEach-Object { Write-Output ("DIAG {0} :: {1}" -f $_.Name, $_.CommandLine) }
+          }
+          Write-Output "=== OS"; (Get-CimInstance Win32_OperatingSystem).Caption
+          Write-Output "=== HKCU url association"; reg query "HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https" /s
+          Write-Output "=== HKCR https command"; reg query "HKCR\https\shell\open\command" /s
+          Write-Output "=== session"; [Environment]::UserInteractive; (Get-Process -Id $PID).SessionId
+          $before = (Snap).ProcessId
+          $p = Start-Process -FilePath "$env:SystemRoot\System32\rundll32.exe" -ArgumentList 'url.dll,FileProtocolHandler','https://example.invalid/?diag=rundll&x=2' -PassThru
+          Show-New 'rundll32' $before
+          Write-Output "DIAG rundll32 exited=$($p.HasExited) code=$($p.ExitCode)"
+          $before = (Snap).ProcessId
+          Start-Process 'https://example.invalid/?diag=control&x=2'
+          Show-New 'ShellExecute control' $before
+          exit 0
       - name: Baseline, unfixed code (expected to fail)
         continue-on-error: true
         shell: bash
