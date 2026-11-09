@@ -128,6 +128,7 @@ export async function startOAuthCallbackServer(
             "</body></html>"
         );
         server.close();
+        clearTimeout(timeLimit);
         callbackResolve(code);
       } else {
         res.writeHead(200, { "Content-Type": "text/html" });
@@ -144,7 +145,7 @@ export async function startOAuthCallbackServer(
       reject(new Error(`Failed to start callback server: ${err.message}`));
     });
 
-    setTimeout(() => {
+    const timeLimit = setTimeout(() => {
       server.close();
       callbackReject(new Error("Login timed out after 120 seconds"));
     }, 120_000);
