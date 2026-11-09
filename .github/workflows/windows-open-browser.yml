@@ -19,4 +19,13 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm run build
-      - run: node scripts/ci/windows-open-browser-check.mjs
+      - name: Baseline, unfixed code (expected to fail)
+        continue-on-error: true
+        shell: bash
+        run: |
+          git fetch --depth=1 origin de5578a6c46cdcc1e5d2fc0191db748bb03326de
+          git worktree add ../baseline FETCH_HEAD
+          (cd ../baseline && npm ci && npm run build)
+          node scripts/ci/windows-open-browser-check.mjs ../baseline/dist
+      - name: Fixed code
+        run: node scripts/ci/windows-open-browser-check.mjs
