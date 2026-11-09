@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.8](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.7...v0.19.8) (2026-11-09)
+
+
+### Bug Fixes
+
+* **deps:** bump vite 8.0.16 → 8.3.5 in the lockfile to clear the high audit finding ([#156](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/156)) ([bcde5f4](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/bcde5f4bea74de513dc3996ff8f3644d49ed50a0))
+* **deps:** bump vitest 4.1.8 → 4.1.12 to clear the @vitest/mocker advisory ([#158](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/158)) ([de5578a](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/de5578a6c46cdcc1e5d2fc0191db748bb03326de))
+* **login:** open URLs without cmd.exe and remove the MCP endpoint argument ([#159](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/159)) ([cb76d9c](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/cb76d9cc5fdf61ff92751cdfe7a4e24365c4875e))
+
 ## [0.19.7](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.6...v0.19.7) (2026-11-01)
 
 
