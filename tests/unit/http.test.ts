@@ -91,7 +91,7 @@ describe("startHttpServer", () => {
       {
         method: "OPTIONS",
         url: "/mcp",
-        headers: { origin: "http://localhost:4321" },
+        headers: { host: "127.0.0.1:3000", origin: "http://localhost:4321" },
       },
       response,
     );
@@ -134,7 +134,7 @@ describe("startHttpServer", () => {
       {
         method: "GET",
         url: "/unknown",
-        headers: { origin: "http://127.0.0.1:8787" },
+        headers: { host: "127.0.0.1:3000", origin: "http://127.0.0.1:8787" },
       },
       response,
     );
