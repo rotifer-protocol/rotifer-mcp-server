@@ -150,6 +150,13 @@ jobs:
             exit 1
           fi
 
+      # A version published seconds ago can still answer 404, and the Registry
+      # rejects the publish when it does.
+      - name: Wait for this version to be visible on npm
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/ci/wait-for-npm-version.mjs @rotifer/mcp-server "$RELEASE_VERSION"
+
       - name: Install mcp-publisher
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
