@@ -167,7 +167,7 @@ describe("startOAuthCallbackServer", () => {
     timeoutSpy.mockRestore();
   });
 
-  it("resolves implicit token callbacks", async () => {
+  it("refuses a token handed to the callback port and keeps waiting for a code", async () => {
     const originalSetTimeout = globalThis.setTimeout;
     const timeoutSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(
       ((handler: TimerHandler, timeout?: number, ...args: any[]) => {
@@ -188,17 +188,22 @@ describe("startOAuthCallbackServer", () => {
 
     const { port, waitForCallback } = await startOAuthCallbackServer(0);
     const response = await fetch(
-      `http://127.0.0.1:${port}/callback/token?access_token=token-abc&refresh_token=refresh-xyz`,
+      `http://127.0.0.1:${port}/callback/token?access_token=forged&refresh_token=forged`,
     );
 
-    expect(response.status).toBe(200);
-    expect(await response.text()).toContain("Login successful");
-    await expect(waitForCallback).resolves.toBe("implicit:token-abc:refresh-xyz");
+    expect(await response.text()).not.toContain("Login successful");
+    const pending = Symbol("pending");
+    await expect(
+      Promise.race([waitForCallback, new Promise((r) => setTimeout(() => r(pending), 50))]),
+    ).resolves.toBe(pending);
+
+    await fetch(`http://127.0.0.1:${port}/callback?code=real-code`);
+    await expect(waitForCallback).resolves.toBe("real-code");
 
     timeoutSpy.mockRestore();
   });
 
-  it("serves the browser hash relay page before the callback arrives", async () => {
+  it("does not serve a page that forwards a URL fragment to this port", async () => {
     const originalSetTimeout = globalThis.setTimeout;
     const timeoutSpy = vi.spyOn(globalThis, "setTimeout").mockImplementation(
       ((handler: TimerHandler, timeout?: number, ...args: any[]) => {
@@ -218,11 +223,11 @@ describe("startOAuthCallbackServer", () => {
     const { startOAuthCallbackServer } = await import("../../src/auth.js");
 
     const { port, waitForCallback } = await startOAuthCallbackServer(0);
-    const relayResponse = await fetch(`http://127.0.0.1:${port}/`);
-    const relayHtml = await relayResponse.text();
+    const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
 
-    expect(relayHtml).toContain("window.location.hash");
-    expect(relayHtml).toContain("Enable JavaScript to complete login.");
+    expect(html).not.toContain("location.hash");
+    expect(html).not.toContain("<script");
+    expect(html).toContain("Login failed");
 
     await fetch(`http://127.0.0.1:${port}/?code=done`);
     await expect(waitForCallback).resolves.toBe("done");

@@ -158,7 +158,7 @@ describe("startHttpServer", () => {
       {
         method: "POST",
         url: "/mcp",
-        headers: { origin: "http://localhost:3000" },
+        headers: { host: "localhost:3000", origin: "http://localhost:3000" },
       },
       response,
     );
@@ -185,7 +185,7 @@ describe("startHttpServer", () => {
       {
         method: "POST",
         url: "/",
-        headers: { origin: "http://localhost:3000" },
+        headers: { host: "localhost:3000", origin: "http://localhost:3000" },
       },
       response,
     );

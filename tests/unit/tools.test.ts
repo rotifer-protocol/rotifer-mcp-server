@@ -55,7 +55,7 @@ import {
   loadCloudConfig,
 } from "../../src/cloud.js";
 
-import { loadCredentials, clearCredentials, startOAuthCallbackServer } from "../../src/auth.js";
+import { loadCredentials, clearCredentials, saveCredentials, startOAuthCallbackServer } from "../../src/auth.js";
 import { openBrowser } from "../../src/open-browser.js";
 
 import { arenaSubmit } from "../../src/local.js";
@@ -349,6 +349,27 @@ describe("login", () => {
     expect(url.startsWith("https://test.rotifer.dev/auth/v1/authorize?provider=gitlab&")).toBe(true);
     expect(url).toContain("redirect_to=http://localhost:9876/callback");
     expect(url).toContain("code_challenge=test-challenge");
+  });
+
+  it("never treats the callback value as a token", async () => {
+    vi.mocked(loadCredentials).mockReturnValueOnce(null);
+    vi.mocked(startOAuthCallbackServer).mockResolvedValueOnce({
+      port: 9876,
+      waitForCallback: Promise.resolve("implicit:forged-token:forged-refresh"),
+    });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, text: () => Promise.resolve("Invalid code") });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const result = await login({});
+      expect(result.success).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("grant_type=pkce");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).auth_code).toBe("implicit:forged-token:forged-refresh");
+    expect(JSON.stringify(fetchMock.mock.calls)).not.toContain("Bearer forged-token");
+    expect(vi.mocked(saveCredentials)).not.toHaveBeenCalled();
   });
 
   it("reports a bad configured endpoint before starting anything", async () => {

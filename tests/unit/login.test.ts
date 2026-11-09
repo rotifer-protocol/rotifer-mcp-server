@@ -33,6 +33,11 @@ function mockCallbackServer(result: string | Error) {
   });
 }
 
+const TOKEN_EXCHANGE = {
+  ok: true,
+  json: () => Promise.resolve({ access_token: "pkce-at", refresh_token: "pkce-rt" }),
+};
+
 const MOCK_CREDS = {
   access_token: "at-123",
   refresh_token: "rt-456",
@@ -87,14 +92,16 @@ describe("runLogin", () => {
 
   it("defaults to github provider when none specified", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    mockCallbackServer("implicit:at-new:rt-new");
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
-        id: "u2",
-        user_metadata: { user_name: "newuser", avatar_url: null },
-      }),
-    }) as any;
+    mockCallbackServer("auth-code");
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(TOKEN_EXCHANGE)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          id: "u2",
+          user_metadata: { user_name: "newuser", avatar_url: null },
+        }),
+      }) as any;
 
     await runLogin({});
     expect(openBrowser).toHaveBeenCalledWith(
@@ -104,14 +111,16 @@ describe("runLogin", () => {
 
   it("constructs auth URL with code challenge", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    mockCallbackServer("implicit:at-new:rt-new");
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
-        id: "u2",
-        user_metadata: { user_name: "newuser" },
-      }),
-    }) as any;
+    mockCallbackServer("auth-code");
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(TOKEN_EXCHANGE)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          id: "u2",
+          user_metadata: { user_name: "newuser" },
+        }),
+      }) as any;
 
     await runLogin({});
     expect(openBrowser).toHaveBeenCalledWith(
@@ -121,14 +130,16 @@ describe("runLogin", () => {
 
   it("uses random port in redirect URL", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    mockCallbackServer("implicit:at:rt");
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
-        id: "u2",
-        user_metadata: { user_name: "newuser" },
-      }),
-    }) as any;
+    mockCallbackServer("auth-code");
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(TOKEN_EXCHANGE)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          id: "u2",
+          user_metadata: { user_name: "newuser" },
+        }),
+      }) as any;
 
     await runLogin({});
     expect(openBrowser).toHaveBeenCalledWith(
@@ -136,24 +147,25 @@ describe("runLogin", () => {
     );
   });
 
-  it("handles implicit token flow correctly", async () => {
+  it("never treats the callback value as a token", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    mockCallbackServer("implicit:token-abc:refresh-xyz");
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
-        id: "u3",
-        user_metadata: { user_name: "implicit-user" },
-      }),
-    }) as any;
+    mockCallbackServer("implicit:forged-token:forged-refresh");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      text: () => Promise.resolve("Invalid code"),
+    });
+    global.fetch = fetchMock as any;
 
     await runLogin({});
-    expect(saveCredentials).toHaveBeenCalledWith(
-      expect.objectContaining({
-        access_token: "token-abc",
-        refresh_token: "refresh-xyz",
-      }),
-    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("grant_type=pkce");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      auth_code: "implicit:forged-token:forged-refresh",
+      code_verifier: "test-verifier",
+    });
+    expect(JSON.stringify(fetchMock.mock.calls)).not.toContain("Bearer forged-token");
+    expect(saveCredentials).not.toHaveBeenCalled();
   });
 
   it("handles PKCE code exchange flow", async () => {
@@ -201,14 +213,16 @@ describe("runLogin", () => {
 
   it("uses custom endpoint when provided", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    mockCallbackServer("implicit:at:rt");
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
-        id: "u5",
-        user_metadata: { user_name: "custom" },
-      }),
-    }) as any;
+    mockCallbackServer("auth-code");
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(TOKEN_EXCHANGE)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          id: "u5",
+          user_metadata: { user_name: "custom" },
+        }),
+      }) as any;
 
     await runLogin({ endpoint: "https://custom.supabase.co" });
     expect(openBrowser).toHaveBeenCalledWith(
@@ -218,14 +232,16 @@ describe("runLogin", () => {
 
   it("extracts username from various metadata fields", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    mockCallbackServer("implicit:at:rt");
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
-        id: "u6",
-        user_metadata: { preferred_username: "preferred-name" },
-      }),
-    }) as any;
+    mockCallbackServer("auth-code");
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(TOKEN_EXCHANGE)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          id: "u6",
+          user_metadata: { preferred_username: "preferred-name" },
+        }),
+      }) as any;
 
     await runLogin({});
     expect(saveCredentials).toHaveBeenCalledWith(
@@ -237,14 +253,16 @@ describe("runLogin", () => {
 
   it("falls back to email prefix when no username metadata", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    mockCallbackServer("implicit:at:rt");
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
-        id: "u7",
-        user_metadata: { email: "alice@example.com" },
-      }),
-    }) as any;
+    mockCallbackServer("auth-code");
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(TOKEN_EXCHANGE)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          id: "u7",
+          user_metadata: { email: "alice@example.com" },
+        }),
+      }) as any;
 
     await runLogin({});
     expect(saveCredentials).toHaveBeenCalledWith(
@@ -256,11 +274,13 @@ describe("runLogin", () => {
 
   it("defaults to 'unknown' when no username info available", async () => {
     vi.mocked(loadCredentials).mockReturnValue(null);
-    mockCallbackServer("implicit:at:rt");
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ id: "u8", user_metadata: {} }),
-    }) as any;
+    mockCallbackServer("auth-code");
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(TOKEN_EXCHANGE)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: "u8", user_metadata: {} }),
+      }) as any;
 
     await runLogin({});
     expect(saveCredentials).toHaveBeenCalledWith(

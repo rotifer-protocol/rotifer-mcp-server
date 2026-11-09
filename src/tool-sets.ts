@@ -343,6 +343,21 @@ export function ignoredToolNamesMessage(unknown: readonly string[]): string {
 }
 
 /**
+ * Sign-in state belongs to the machine the server runs on. Over HTTP the caller
+ * may be somewhere else, and would be opening a browser or clearing credentials
+ * on a machine it cannot see.
+ */
+export const LOCAL_ONLY_TOOLS: ReadonlySet<string> = new Set(["login", "logout"]);
+
+/** Why a sign-in tool is unavailable over HTTP, and what to do instead. */
+export function localOnlyToolMessage(name: string): string {
+  const effect = name === "login"
+    ? "open a browser and save credentials"
+    : "clear the saved credentials";
+  return `${name} is not available over HTTP: it would ${effect} on the machine running this server. On that machine, run: rotifer-mcp-server ${name}`;
+}
+
+/**
  * Why a tool is unavailable, and what to do about it.
  *
  * A bare "not available" reads as "this thing is broken". The set is a
