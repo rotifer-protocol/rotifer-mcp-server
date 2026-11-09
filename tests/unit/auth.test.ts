@@ -161,7 +161,7 @@ describe("startOAuthCallbackServer", () => {
     const response = await fetch(`http://127.0.0.1:${port}/?code=auth-code-123`);
 
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain("Login successful");
+    expect(await response.text()).toContain("Authorization complete");
     await expect(waitForCallback).resolves.toBe("auth-code-123");
 
     timeoutSpy.mockRestore();
@@ -191,7 +191,7 @@ describe("startOAuthCallbackServer", () => {
       `http://127.0.0.1:${port}/callback/token?access_token=forged&refresh_token=forged`,
     );
 
-    expect(await response.text()).not.toContain("Login successful");
+    expect(await response.text()).not.toContain("Authorization complete");
     const pending = Symbol("pending");
     await expect(
       Promise.race([waitForCallback, new Promise((r) => setTimeout(() => r(pending), 50))]),
@@ -227,7 +227,7 @@ describe("startOAuthCallbackServer", () => {
 
     expect(html).not.toContain("location.hash");
     expect(html).not.toContain("<script");
-    expect(html).toContain("Login failed");
+    expect(html).toContain("Login didn't finish");
 
     await fetch(`http://127.0.0.1:${port}/?code=done`);
     await expect(waitForCallback).resolves.toBe("done");
