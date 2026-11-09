@@ -142,8 +142,8 @@ AI:  → wrap_gene({ gene_name: "my-search", domain: "search.web", fidelity: "Wr
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
 | `auth_status` | Check login status | — |
-| `login` | OAuth login (GitHub/GitLab) | `provider` |
-| `logout` | Clear credentials | — |
+| `login` | OAuth login (GitHub/GitLab). Not available over HTTP | `provider` |
+| `logout` | Clear credentials. Not available over HTTP | — |
 | `get_mcp_stats` | MCP call analytics | `days` |
 | `get_my_reputation` | Current user's reputation | — |
 
@@ -354,7 +354,7 @@ it over Streamable HTTP instead:
 ```bash
 rotifer-mcp-server serve                      # http://127.0.0.1:3000/mcp
 rotifer-mcp-server serve --port 8080
-rotifer-mcp-server serve --host 0.0.0.0       # reachable from other machines
+rotifer-mcp-server serve --host 0.0.0.0 --allowed-hosts mcp.example.com   # reachable from other machines
 ```
 
 - **It listens on `127.0.0.1` unless you pass `--host`.** The HTTP endpoint has no
@@ -362,6 +362,18 @@ rotifer-mcp-server serve --host 0.0.0.0       # reachable from other machines
   not reachable from other machines by default. If you pass a non-loopback
   `--host`, the server says so on stderr when it starts. Earlier versions
   listened on every interface.
+- **A non-loopback `--host` needs `--allowed-hosts`.** List the host names or IP
+  addresses clients will use, separated by commas, with no scheme, port, path or
+  wildcard. Without the list, `serve` exits with status 2. Earlier versions
+  started anyway.
+- **`/mcp` only answers requests addressed to a name it knows.** The `Host`
+  header, and the `Origin` header when a browser sends one, must be loopback or
+  an entry in `--allowed-hosts`; anything else gets `403`. Listening on loopback
+  alone does not stop a web page from reaching the server through DNS rebinding.
+- **`login` and `logout` are not available over HTTP.** They are not listed, and
+  calling them returns an error, because they act on the credentials of the
+  machine running the server. On that machine, run `rotifer-mcp-server login` or
+  `rotifer-mcp-server logout`.
 - **Request bodies are capped at 256 KiB.** A larger request is answered `413`
   with a JSON-RPC error before it is parsed. MCP messages are far smaller than
   this; the cap exists because the SDK's default (4 MiB) is the bound

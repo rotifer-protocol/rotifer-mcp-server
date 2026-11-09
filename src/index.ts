@@ -46,7 +46,7 @@ async function main() {
   }
 
   if (subcommand === "serve") {
-    const { startHttpServer } = await import("./http.js");
+    const { startHttpServer, resolveAllowedHosts } = await import("./http.js");
     const portIdx = process.argv.indexOf("--port");
     const port = portIdx !== -1 ? parseInt(process.argv[portIdx + 1], 10) : undefined;
     // Loopback by default; `--host 0.0.0.0` (or an interface address) to
@@ -57,11 +57,24 @@ async function main() {
       console.error("serve: --host needs an address, e.g. --host 0.0.0.0");
       process.exit(2);
     }
+    const allowedIdx = process.argv.indexOf("--allowed-hosts");
+    const allowedValue = allowedIdx !== -1 ? process.argv[allowedIdx + 1] : undefined;
+    if (allowedIdx !== -1 && (!allowedValue || allowedValue.startsWith("--"))) {
+      console.error("serve: --allowed-hosts needs a value, e.g. --allowed-hosts mcp.example.com");
+      process.exit(2);
+    }
+    let allowedHosts: string[] = [];
+    try {
+      allowedHosts = resolveAllowedHosts(host, allowedValue);
+    } catch (err) {
+      console.error(`serve: ${(err as Error).message}`);
+      process.exit(2);
+    }
     notifyVersionOnStderr();
     // Sessions build their server per request; build one now so an unusable
     // --tools stops `serve` at launch, not on the first request.
     createServer();
-    await startHttpServer({ port, host });
+    await startHttpServer({ port, host, allowedHosts });
     return;
   }
 

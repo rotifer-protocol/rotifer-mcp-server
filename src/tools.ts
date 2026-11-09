@@ -220,34 +220,25 @@ export async function login(args: {
   openBrowser(authUrl);
 
   try {
-    const callbackResult = await waitForCallback;
+    const authCode = await waitForCallback;
 
-    let accessToken: string;
-    let refreshToken: string;
-
-    if (callbackResult.startsWith("implicit:")) {
-      const parts = callbackResult.split(":");
-      accessToken = parts.slice(1, -1).join(":");
-      refreshToken = parts[parts.length - 1];
-    } else {
-      const tokenRes = await fetch(
-        `${endpoint}/auth/v1/token?grant_type=pkce`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", apikey: config.anonKey },
-          body: JSON.stringify({ auth_code: callbackResult, code_verifier: codeVerifier }),
-        }
-      );
-
-      if (!tokenRes.ok) {
-        const err = await tokenRes.text();
-        return { success: false, username: null, provider: null, message: `Authentication failed: ${err}` };
+    const tokenRes = await fetch(
+      `${endpoint}/auth/v1/token?grant_type=pkce`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: config.anonKey },
+        body: JSON.stringify({ auth_code: authCode, code_verifier: codeVerifier }),
       }
+    );
 
-      const tokenData = (await tokenRes.json()) as any;
-      accessToken = tokenData.access_token;
-      refreshToken = tokenData.refresh_token;
+    if (!tokenRes.ok) {
+      const err = await tokenRes.text();
+      return { success: false, username: null, provider: null, message: `Authentication failed: ${err}` };
     }
+
+    const tokenData = (await tokenRes.json()) as any;
+    const accessToken: string = tokenData.access_token;
+    const refreshToken: string = tokenData.refresh_token;
 
     const userRes = await fetch(`${endpoint}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${accessToken}`, apikey: config.anonKey },
