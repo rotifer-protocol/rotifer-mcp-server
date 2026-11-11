@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.8...v0.20.0) (2026-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* `serve --host <non-loopback>` now exits with status 2 unless an access token is configured. Add --token-file <path> or set ROTIFER_MCP_HTTP_TOKEN, and send the token from every client. OPTIONS requests and paths other than /health now answer 403 when the Host or Origin is not allowed.
+* `serve` with a non-loopback `--host` now exits with status 2 unless `--allowed-hosts` is given. `/mcp` answers 403 to any other Host or Origin. The `login` and `logout` tools are not listed over HTTP and return an error when called there.
+
+### Features
+
+* **login:** restyle the browser callback pages ([#165](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/165)) ([8d67d5c](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/8d67d5ccac1ecc7d798c72a90843536f4b8a66a4))
+* require an access token to serve HTTP beyond loopback ([#164](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/164)) ([8c2f4dd](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/8c2f4dd8b8e019d1827edd5cd72705fa77d5d292))
+* serve HTTP only to known hosts and accept only a PKCE code at login ([#160](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/160)) ([d42e1de](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/d42e1def64f6932a1999133adbefd7290186029a))
+
+
+### Bug Fixes
+
+* **ci:** wait for npm to serve the version before registering it ([#161](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/161)) ([2a876b1](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/2a876b12320aa0d2ae08205be474bd2cf1b3fc2c))
+* **local:** run CLI 0.36.1 when no rotifer is installed ([#166](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/166)) ([24b3e22](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/24b3e22eafe5a4077894bba362bf693bd869f649))
+* **login:** clear the time limit once the code arrives ([#163](https://github.com/rotifer-protocol/rotifer-mcp-server/issues/163)) ([83c5679](https://github.com/rotifer-protocol/rotifer-mcp-server/commit/83c567956dc823c65d943ec6640d9ce9dd1e23c4))
+
 ## [0.19.8](https://github.com/rotifer-protocol/rotifer-mcp-server/compare/v0.19.7...v0.19.8) (2026-11-09)
 
 
