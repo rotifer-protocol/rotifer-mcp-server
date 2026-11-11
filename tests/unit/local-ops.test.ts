@@ -270,6 +270,17 @@ describe("shell-backed local commands", () => {
     expect(atLeast, `${PLAYGROUND_FALLBACK_SPEC} predates Agent Memory (0.33.0)`).toBe(true);
   });
 
+  it("pins the npx fallback to a CLI that runs Wrapped genes in the sandbox (@rotifer/playground >= 0.36.1)", () => {
+    // run_gene on a wrapped gene reaches `rotifer run` through this fallback.
+    // Wrapped genes only ran in the sandbox from 0.36.0 (#572 in the CLI);
+    // 0.36.1 adds the honest Wrapped fidelity of the starter genes and the
+    // compile message for genes that need Node built-ins.
+    const [major, minor, patch] = PLAYGROUND_FALLBACK_SPEC.split("@").pop()!.split(".").map(Number);
+    expect([major, minor, patch]).not.toContain(NaN);
+    const atLeast = major > 0 || minor > 36 || (minor === 36 && patch >= 1);
+    expect(atLeast, `${PLAYGROUND_FALLBACK_SPEC} predates the Wrapped sandbox fixes (0.36.1)`).toBe(true);
+  });
+
   it("uses the installed rotifer binary when available", () => {
     mockSpawnSequence(
       { status: 0, stdout: "/usr/local/bin/rotifer\n", stderr: "" },
