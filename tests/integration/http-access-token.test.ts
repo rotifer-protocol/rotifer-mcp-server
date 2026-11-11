@@ -17,7 +17,16 @@ mkdirSync(home);
 
 const TOKEN_VAR = "ROTIFER_MCP_HTTP_TOKEN";
 const token = "stand-in-http-access-token";
-const wrongTokens = ["x", `${token}-but-longer`, token.toUpperCase()];
+const wrongTokens = [
+  "x",
+  `${token}-but-longer`,
+  token.toUpperCase(),
+  // Prefixes of the real token: knowing how it starts must not be enough.
+  token.slice(0, -1),
+  token.slice(0, Math.ceil(token.length / 2)),
+];
+/** Must never appear in a reply or in what the servers print ("x" is too short to search for). */
+const secrets = [token, ...wrongTokens.slice(1)];
 
 const { [TOKEN_VAR]: _inherited, ...inherited } = process.env;
 const baseEnv: Record<string, string> = {
@@ -74,7 +83,13 @@ function launch(args: string[], env = baseEnv): Promise<number> {
   );
 }
 
-type Reply = { status: number; headers: http.IncomingHttpHeaders; body: string };
+type Reply = {
+  status: number;
+  statusMessage: string;
+  headers: http.IncomingHttpHeaders;
+  rawHeaders: string[];
+  body: string;
+};
 
 function send(
   port: number,
@@ -95,7 +110,15 @@ function send(
         let body = "";
         res.setEncoding("utf8");
         res.on("data", (chunk) => (body += chunk));
-        res.on("end", () => done({ status: res.statusCode ?? 0, headers: res.headers, body }));
+        res.on("end", () =>
+          done({
+            status: res.statusCode ?? 0,
+            statusMessage: res.statusMessage ?? "",
+            headers: res.headers,
+            rawHeaders: res.rawHeaders,
+            body,
+          }),
+        );
       },
     );
     req.on("error", fail);
@@ -114,6 +137,13 @@ function expectUnauthorized(reply: Reply) {
   expect(reply.body).toContain("Authorization: Bearer");
   expect(reply.body).not.toContain("search_genes");
   expect(reply.body).not.toContain("is_logged_in");
+  expectNoSecret(reply);
+}
+
+/** Searches the whole reply: status line, every header name and value, and the body. */
+function expectNoSecret(reply: Reply) {
+  const whole = [`${reply.status} ${reply.statusMessage}`, ...reply.rawHeaders, reply.body].join("\n");
+  for (const value of secrets) expect(whole).not.toContain(value);
 }
 
 describe("serve refuses to start", () => {
@@ -382,6 +412,6 @@ describe("what the servers printed", () => {
   it("contains no token, right or wrong", () => {
     const printed = output.join("");
     expect(printed).toContain("listening on");
-    for (const value of [token, ...wrongTokens.slice(1)]) expect(printed).not.toContain(value);
+    for (const value of secrets) expect(printed).not.toContain(value);
   });
 });
