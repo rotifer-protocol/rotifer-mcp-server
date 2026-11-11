@@ -354,22 +354,46 @@ it over Streamable HTTP instead:
 ```bash
 rotifer-mcp-server serve                      # http://127.0.0.1:3000/mcp
 rotifer-mcp-server serve --port 8080
-rotifer-mcp-server serve --host 0.0.0.0 --allowed-hosts mcp.example.com   # reachable from other machines
+
+# Reachable from other machines: needs a list of names and an access token
+openssl rand -hex 32 > mcp-token
+chmod 600 mcp-token
+rotifer-mcp-server serve --host 0.0.0.0 --allowed-hosts mcp.example.com --token-file mcp-token
 ```
 
-- **It listens on `127.0.0.1` unless you pass `--host`.** The HTTP endpoint has no
-  authentication, and its tools act with your signed-in Rotifer account, so it is
-  not reachable from other machines by default. If you pass a non-loopback
-  `--host`, the server says so on stderr when it starts. Earlier versions
-  listened on every interface.
+- **It listens on `127.0.0.1` unless you pass `--host`.** Its tools act with your
+  signed-in Rotifer account, so it is not reachable from other machines by
+  default. If you pass a non-loopback `--host`, the server says so on stderr when
+  it starts. Earlier versions listened on every interface.
 - **A non-loopback `--host` needs `--allowed-hosts`.** List the host names or IP
   addresses clients will use, separated by commas, with no scheme, port, path or
   wildcard. Without the list, `serve` exits with status 2. Earlier versions
   started anyway.
-- **`/mcp` only answers requests addressed to a name it knows.** The `Host`
-  header, and the `Origin` header when a browser sends one, must be loopback or
-  an entry in `--allowed-hosts`; anything else gets `403`. Listening on loopback
-  alone does not stop a web page from reaching the server through DNS rebinding.
+- **A non-loopback `--host` also needs an access token.** Pass `--token-file
+  <path>` or set `ROTIFER_MCP_HTTP_TOKEN`, not both. A line break at the end of
+  the file is ignored. The token is not accepted as a command-line value, because
+  other programs on the machine can read those. Without a token, `serve` exits
+  with status 2. On loopback a token is optional, and is enforced if you set one.
+  Earlier versions had no token.
+- **Every path except `/health` only answers requests addressed to a name it
+  knows.** The `Host` header, and the `Origin` header when a browser sends one,
+  must be loopback or an entry in `--allowed-hosts`; anything else gets `403`.
+  Listening on loopback alone does not stop a web page from reaching the server
+  through DNS rebinding.
+- **With a token set, every path except `/health` also needs `Authorization:
+  Bearer <token>`.** A missing or wrong token gets `401`. CORS preflight
+  (`OPTIONS`) is exempt, because browsers cannot attach the header to it; it
+  still has to pass the `Host` and `Origin` check, and it never reaches a tool.
+- **`--allowed-hosts` and the token do different jobs, and a request must pass
+  both.** `--allowed-hosts` decides which names the server may be addressed by,
+  which stops DNS rebinding. It says nothing about who is calling. The token
+  decides who may call.
+- **Everyone holding the token acts as the account signed in on the server.**
+  There are no per-user tokens or permission levels. To revoke access, change the
+  token and restart the server.
+- **The server speaks plain HTTP.** The token travels with every request, so a
+  server reachable from other machines belongs behind an HTTPS reverse proxy or
+  tunnel.
 - **`login` and `logout` are not available over HTTP.** They are not listed, and
   calling them returns an error, because they act on the credentials of the
   machine running the server. On that machine, run `rotifer-mcp-server login` or
@@ -380,6 +404,55 @@ rotifer-mcp-server serve --host 0.0.0.0 --allowed-hosts mcp.example.com   # reac
   [GHSA-46jr-4wx8-v453](https://github.com/advisories/GHSA-46jr-4wx8-v453)
   describes, where a single request can exhaust the server's memory.
 - `GET /health` answers `{"status":"ok","transport":"streamable-http"}` for liveness checks.
+
+To send the token from a client, each of these reads it at connection time, so it
+stays out of the configuration file.
+
+[Claude Code](https://code.claude.com/docs/en/mcp), in `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "rotifer": {
+      "type": "http",
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${ROTIFER_MCP_HTTP_TOKEN}" }
+    }
+  }
+}
+```
+
+[Cursor](https://cursor.com/docs/context/mcp), in `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "rotifer": {
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${env:ROTIFER_MCP_HTTP_TOKEN}" }
+    }
+  }
+}
+```
+
+[VS Code](https://code.visualstudio.com/docs/agents/reference/mcp-configuration), in `mcp.json`:
+
+```json
+{
+  "inputs": [
+    { "type": "promptString", "id": "rotifer-token", "description": "Rotifer MCP access token", "password": true }
+  ],
+  "servers": {
+    "rotifer": {
+      "type": "http",
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${input:rotifer-token}" }
+    }
+  }
+}
+```
+
+Claude Desktop uses stdio by default.
 
 ### Usage reporting
 

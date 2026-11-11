@@ -46,7 +46,7 @@ async function main() {
   }
 
   if (subcommand === "serve") {
-    const { startHttpServer, resolveAllowedHosts } = await import("./http.js");
+    const { startHttpServer, resolveAllowedHosts, resolveAccessToken, ACCESS_TOKEN_ENV } = await import("./http.js");
     const portIdx = process.argv.indexOf("--port");
     const port = portIdx !== -1 ? parseInt(process.argv[portIdx + 1], 10) : undefined;
     // Loopback by default; `--host 0.0.0.0` (or an interface address) to
@@ -63,18 +63,36 @@ async function main() {
       console.error("serve: --allowed-hosts needs a value, e.g. --allowed-hosts mcp.example.com");
       process.exit(2);
     }
+    // Refused rather than ignored, so a token given this way cannot leave the
+    // server running without one. `--token-file=path` is caught for the same reason.
+    if (process.argv.some((arg) => arg === "--token" || /^--token(-file)?=/.test(arg))) {
+      console.error(
+        `serve: give the access token with --token-file <path> or ${ACCESS_TOKEN_ENV}. ` +
+          "It is not accepted on the command line, which other programs on this machine can read.",
+      );
+      process.exit(2);
+    }
+    const tokenFileIdx = process.argv.indexOf("--token-file");
+    const tokenFile = tokenFileIdx !== -1 ? process.argv[tokenFileIdx + 1] : undefined;
+    if (tokenFileIdx !== -1 && (!tokenFile || tokenFile.startsWith("--"))) {
+      console.error("serve: --token-file needs a path, e.g. --token-file ./mcp-token");
+      process.exit(2);
+    }
     let allowedHosts: string[] = [];
+    let accessToken: string | undefined;
     try {
       allowedHosts = resolveAllowedHosts(host, allowedValue);
+      accessToken = resolveAccessToken(host, tokenFile, process.env[ACCESS_TOKEN_ENV]);
     } catch (err) {
       console.error(`serve: ${(err as Error).message}`);
       process.exit(2);
     }
+    delete process.env[ACCESS_TOKEN_ENV];
     notifyVersionOnStderr();
     // Sessions build their server per request; build one now so an unusable
     // --tools stops `serve` at launch, not on the first request.
     createServer();
-    await startHttpServer({ port, host, allowedHosts });
+    await startHttpServer({ port, host, allowedHosts, accessToken });
     return;
   }
 
