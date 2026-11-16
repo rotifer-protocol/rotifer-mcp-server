@@ -281,6 +281,18 @@ describe("shell-backed local commands", () => {
     expect(atLeast, `${PLAYGROUND_FALLBACK_SPEC} predates the Wrapped sandbox fixes (0.36.1)`).toBe(true);
   });
 
+  it("pins the npx fallback to a CLI that holds a gene's global fetch to its network declaration (@rotifer/playground >= 0.37.0)", () => {
+    // run_gene and agent_run reach `rotifer run` / `rotifer agent run` through
+    // this fallback when no CLI is installed. Before 0.37.0 a Hybrid gene's
+    // global fetch bypassed the gateway, so allowedDomains did not apply to it
+    // (CLI #594); 0.37.0 also fails a gene call that never settles instead of
+    // exiting 0 (CLI #598).
+    const [major, minor, patch] = PLAYGROUND_FALLBACK_SPEC.split("@").pop()!.split(".").map(Number);
+    expect([major, minor, patch]).not.toContain(NaN);
+    const atLeast = major > 0 || minor > 37 || (minor === 37 && patch >= 0);
+    expect(atLeast, `${PLAYGROUND_FALLBACK_SPEC} predates the global fetch network constraint (0.37.0)`).toBe(true);
+  });
+
   it("uses the installed rotifer binary when available", () => {
     mockSpawnSequence(
       { status: 0, stdout: "/usr/local/bin/rotifer\n", stderr: "" },
