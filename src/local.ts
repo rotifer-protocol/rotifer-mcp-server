@@ -375,7 +375,7 @@ export function setSpawnedCliChannel(channel: string | null): void {
  * `.github/workflows/playground-pin-drift.yml` compares this pin to npm
  * latest weekly and keeps one issue open while they differ.
  */
-export const PLAYGROUND_FALLBACK_SPEC = "@rotifer/playground@0.37.0";
+export const PLAYGROUND_FALLBACK_SPEC = "@rotifer/playground@0.38.0";
 
 function rotiferCmd(args: string[], cwd?: string): ShellResult {
   const bin = resolveRotiferBin();

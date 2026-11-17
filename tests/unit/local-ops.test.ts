@@ -293,6 +293,20 @@ describe("shell-backed local commands", () => {
     expect(atLeast, `${PLAYGROUND_FALLBACK_SPEC} predates the global fetch network constraint (0.37.0)`).toBe(true);
   });
 
+  it("pins the npx fallback to a CLI that keeps external genes off unsandboxed Node.js in test and publish (@rotifer/playground >= 0.38.0)", () => {
+    // test_gene and publish_gene reach `rotifer test` / `rotifer publish`
+    // through this fallback when no CLI is installed, and neither passes
+    // --trust-unsigned. Before 0.38.0 both ran an uncompiled external gene
+    // (wrapped from ClawHub or installed from Cloud) from its source on
+    // Node.js with the host's full privileges (CLI #613). 0.38.0 also asks
+    // before giving an external gene a credential from the environment and
+    // limits it to the declared host (CLI #569).
+    const [major, minor, patch] = PLAYGROUND_FALLBACK_SPEC.split("@").pop()!.split(".").map(Number);
+    expect([major, minor, patch]).not.toContain(NaN);
+    const atLeast = major > 0 || minor > 38 || (minor === 38 && patch >= 0);
+    expect(atLeast, `${PLAYGROUND_FALLBACK_SPEC} predates keeping external genes off unsandboxed Node.js (0.38.0)`).toBe(true);
+  });
+
   it("uses the installed rotifer binary when available", () => {
     mockSpawnSequence(
       { status: 0, stdout: "/usr/local/bin/rotifer\n", stderr: "" },
